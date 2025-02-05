@@ -1,0 +1,45 @@
+services:
+  db:
+    env_file:
+      - .env
+    image: postgres:13.16
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - main_network
+
+  frontend:
+    env_file:
+      - .env
+    build: ./frontend
+    ports:
+      - 3000:3000
+    volumes:
+      - ./frontend:/home/app
+    environment:
+      - NUXT_HOST=0.0.0.0
+      - NUXT_PORT=3000
+    depends_on:
+      - backend
+
+  backend:
+    env_file:
+      - .env
+    build:
+      context: ./backend
+    restart: always
+    ports:
+      - 8000:8000
+    volumes:
+      - ./backend:/home/app/
+    depends_on:
+      - db
+    networks:
+      - main_network
+
+volumes:
+  postgres_data:
+
+networks:
+  main_network:
