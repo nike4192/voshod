@@ -17,6 +17,7 @@ services:
       - 3000:3000
     volumes:
       - ./frontend:/home/app
+      - frontend_node_modules:/home/app/node_modules
     environment:
       - NUXT_HOST=0.0.0.0
       - NUXT_PORT=3000
@@ -26,8 +27,7 @@ services:
   backend:
     env_file:
       - .env
-    build:
-      context: ./backend
+    build: ./backend
     restart: always
     ports:
       - 8000:8000
@@ -40,6 +40,7 @@ services:
 
 volumes:
   postgres_data:
+  frontend_node_modules:
 
 networks:
   main_network:
