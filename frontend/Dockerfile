@@ -26,4 +26,5 @@ ENV PORT=3000
 ENV NODE_ENV=development
 
 # Run in development mode using yarn
-CMD ["yarn", "run", "dev", "--host"]
+CMD ["yarn", "run", "dev"]
+#ENTRYPOINT ["tail", "-f", "/dev/null"]

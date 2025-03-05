@@ -6,7 +6,7 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     size = models.CharField(max_length=50)  # Размеры (S, M, L, XL)
     weight = models.DecimalField(max_digits=10, decimal_places=2)  # Вес в кг
-    # image = models.ImageField(upload_to='product/')  # Изображение товара
+    image = models.ImageField(upload_to='images', null=True)  # Изображение товара
     stock = models.PositiveIntegerField()  # Количество на складе
 
     def __str__(self):

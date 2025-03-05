@@ -16,15 +16,18 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from .serializers import ProductViewSet
+from .view import ProductViewSet
 from rest_framework.routers import DefaultRouter
+from django.conf.urls.static import static
+from django.conf import settings
+from voshod.view import get_cart, add_cart
 
 router = DefaultRouter()
 router.register(r'product', ProductViewSet)
 
-
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
-
-]
+    path('api/cart/', get_cart),
+    path('api/cart/<product_id>/', add_cart),
+]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

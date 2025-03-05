@@ -7,23 +7,14 @@ export interface Product {
   price: number;
 }
 
-export function useProducts() {
-  const products: Ref<Product[]> = ref([]);
-  const error: Ref<any> = ref(null);
+export async function useProducts() {
+  const products = await $fetch<Product[]>('/api/product/', {baseURL: 'http://localhost'});
+  const error = null;
 
-  const fetchProducts = async () => {
-    try {
-      const { data } = await useFetch<Product[]>('/api/products/');
-      products.value = data.value || [];
-    } catch (err) {
-      error.value = err;
-      console.error('Ошибка при загрузке товаров:', err);
-    }
-  };
+  console.log(products, error,);
 
   return {
     products,
     error,
-    fetchProducts,
   };
 }
