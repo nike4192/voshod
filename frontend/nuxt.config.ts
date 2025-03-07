@@ -23,15 +23,11 @@ export default defineNuxtConfig({
         'primeflex/primeflex.css', // Утилиты для верстки
     ],
 
-    // vite: {
-    //     server: {
-    //         hmr: {
-    //             protocol: 'ws',
-    //             host: 'localhost',
-    //             port: 80
-    //         }
-    //     }
-    // },
+    vite: {
+        server: {
+            hmr: false
+        }
+    },
 
 
 
