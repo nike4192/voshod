@@ -869,10 +869,29 @@
   dependencies:
     "@primeuix/utils" "^0.3.2"
 
+"@primeuix/styled@^0.5.0":
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/@primeuix/styled/-/styled-0.5.0.tgz#90fc8a0930732c91a2ffacc489b3ddd5b7eccf60"
+  integrity sha512-k5CTQ+10cXIXxZTep7sktmYe8lJkjmUaFVDAc1OCsWTJR+bhBy/s6zWIatGljVtuf3RmTSxtlrHQeFLjPmdUNQ==
+  dependencies:
+    "@primeuix/utils" "^0.5.0"
+
+"@primeuix/themes@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@primeuix/themes/-/themes-1.0.0.tgz#5af2a2d1593503ca4a0f82d04ff9e946dd269362"
+  integrity sha512-fxUgcAP9H6FeytbE8c4QvRt8aBnoyZJqvtnnVwHT8PHr1dNSnC1nYKGrXpebcx3SpNy9Hp9oVidGsl6u61+pXQ==
+  dependencies:
+    "@primeuix/styled" "^0.5.0"
+
 "@primeuix/utils@^0.3.2":
   version "0.3.2"
   resolved "https://registry.npmjs.org/@primeuix/utils/-/utils-0.3.2.tgz"
   integrity sha512-B+nphqTQeq+i6JuICLdVWnDMjONome2sNz0xI65qIOyeB4EF12CoKRiCsxuZ5uKAkHi/0d1LqlQ9mIWRSdkavw==
+
+"@primeuix/utils@^0.5.0":
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/@primeuix/utils/-/utils-0.5.1.tgz#7bca8a849f1d4d050f4d6a4bb8a179d0b0c2e99f"
+  integrity sha512-/bYirtF3gJOGrRQfQ5tUyQOLEria7wg/UCqvpIydTAxLmj/UWgWwh2kAjYVp49eldm1+2sk4+TDkbAz8XcPpew==
 
 "@primevue/auto-import-resolver@4.2.5":
   version "4.2.5"
@@ -916,12 +935,13 @@
     primevue "4.2.5"
     unplugin-vue-components "0.27.0"
 
-"@primevue/themes@^4.2.5":
-  version "4.2.5"
-  resolved "https://registry.npmjs.org/@primevue/themes/-/themes-4.2.5.tgz"
-  integrity sha512-8F7yA36xYIKtNuAuyBdZZEks/bKDwlhH5WjpqGGB0FdwfAEoBYsynQ5sdqcT2Lb/NsajHmS5lc++Ttlvr1g1Lw==
+"@primevue/themes@^4.3.1":
+  version "4.3.1"
+  resolved "https://registry.yarnpkg.com/@primevue/themes/-/themes-4.3.1.tgz#a283b34a511f30e9c2c8286ee339854efffaa01d"
+  integrity sha512-aC7V5BkMoMxEMoq7hIf+PNEaY/AS5EAgVg96Gf3bvV1JqZ36hSQ2CV1SfuNsWeEvIPF/u4L5qvjwC/LGjT4qgw==
   dependencies:
-    "@primeuix/styled" "^0.3.2"
+    "@primeuix/styled" "^0.5.0"
+    "@primeuix/themes" "^1.0.0"
 
 "@redocly/ajv@^8.11.2":
   version "8.11.2"

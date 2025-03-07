@@ -39,9 +39,21 @@ ALLOWED_HOSTS = env.list(
     "ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]
 )
 
+# Разрешаем кросс-доменные запросы в разработке
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
  "http://localhost",
 ]
+
+# Настройки CSRF для работы с SPA
+CSRF_COOKIE_SAMESITE = 'Lax'  # В продакшене используйте 'Lax' или 'Strict'
+CSRF_COOKIE_HTTPONLY = False  # False позволяет JavaScript читать cookie
+CSRF_USE_SESSIONS = False  # Храним токен в cookie, а не в сессии
+CSRF_COOKIE_NAME = 'csrftoken'  # Стандартное имя, которое ожидает Django
+CSRF_HEADER_NAME = 'X-CSRFToken'  # Заголовок для проверки токена
+
+# Security Settings
+X_FRAME_OPTIONS = "SAMEORIGIN"
 
 # Application definition
 
@@ -67,8 +79,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.common.CommonMiddleware",
-
 ]
 
 ROOT_URLCONF = 'voshod.urls'
