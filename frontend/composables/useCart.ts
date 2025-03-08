@@ -1,58 +1,112 @@
-import { ref } from 'vue';
 import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
 import axios from 'axios';
 
-export interface Product {
-  id: number;
-  name: string;
-  price: number;
-  description?: string;
-  quantity?: number;
-  total_price?: number;
-  image_url?: string;
-}
-
-export const useCart = defineStore('useCart', function useCart() {
-  const cartProducts = ref<Product[]>([]);
+export const useCart = defineStore('cart', () => {
+  const cartProducts = ref([]);
   const totalPrice = ref(0);
+  const totalQuantity = ref(0);
+  const totalWeight = ref(0); // Новая переменная для хранения общего веса
   const loading = ref(false);
   const error = ref(null);
   const paymentStatus = ref('');
   const paymentMessage = ref('');
   const insufficientItems = ref([]);
 
+  // Получение базовой информации о корзине
+  async function fetchCart() {
+    loading.value = true;
+    try {
+      const response = await axios.get('/api/cart/');
+      if (response.data && response.data.cart) {
+        cartProducts.value = response.data.cart;
+        totalQuantity.value = response.data.total_quantity || 0;  // Получаем значение с бэкенда
+      } else {
+        cartProducts.value = [];
+        totalQuantity.value = 0;
+      }
+    } catch (err) {
+      console.error('Ошибка при получении корзины:', err);
+      error.value = err;
+      cartProducts.value = [];
+      totalQuantity.value = 0;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+    async function fetchCartWeight() {
+    loading.value = true;
+    try {
+      const response = await axios.get('/api/cart/weight/');
+      totalWeight.value = response.data.total_weight || 0;
+    } catch (err) {
+      console.error('Ошибка при получении веса корзины:', err);
+      error.value = err;
+      totalWeight.value = 0;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  // Получение подробной информации о товарах в корзине
   async function fetchCartProducts() {
     loading.value = true;
     try {
       const response = await axios.get('/api/get_cart_products/');
-      cartProducts.value = response.data.cart_products;
-      totalPrice.value = response.data.total_price;
+      cartProducts.value = response.data.cart_products || [];
+      totalPrice.value = response.data.total_price || 0;
+      totalQuantity.value = response.data.total_quantity || 0;
+
+      // Получаем вес корзины
+      await fetchCartWeight();
     } catch (err) {
-      console.error('Ошибка при загрузке товаров в корзине:', err);
+      console.error('Ошибка при получении товаров корзины:', err);
       error.value = err;
+      cartProducts.value = [];
+      totalPrice.value = 0;
+      totalQuantity.value = 0;
+      totalWeight.value = 0;
     } finally {
       loading.value = false;
     }
   }
 
+  // Добавление товара в корзину
   async function addCart(productId) {
-    cartProducts.value = (await $fetch<Product[]>('/api/cart/' + productId + '/', {baseURL: 'http://localhost', method: "POST"})).cart;
+    loading.value = true;
+    try {
+      const response = await axios.post(`/api/cart/${productId}/`);
+      console.log('Товар добавлен в корзину:', response.data);
+      await fetchCartProducts(); // Обновляем корзину после добавления
+      return true;
+    } catch (err) {
+      console.error('Ошибка при добавлении товара в корзину:', err);
+      error.value = err;
+      return false;
+    } finally {
+      loading.value = false;
+    }
   }
 
+  // Удаление товара из корзины
   async function removeFromCart(productId) {
     loading.value = true;
     try {
       await axios.delete(`/api/cart/remove/${productId}/`);
-      await fetchCartProducts();
+      console.log('Товар удален из корзины:', productId);
+      await fetchCartProducts(); // Обновляем корзину после удаления
+      return true;
     } catch (err) {
       console.error('Ошибка при удалении товара из корзины:', err);
       error.value = err;
+      return false;
     } finally {
       loading.value = false;
     }
   }
 
-  // Новая функция для обработки оплаты
+  // Обработка оплаты
   async function processPayment(customerData = {}) {
     loading.value = true;
     paymentStatus.value = '';
@@ -86,15 +140,20 @@ export const useCart = defineStore('useCart', function useCart() {
     }
   }
 
+
   return {
     cartProducts,
     totalPrice,
+    totalQuantity,
+    totalWeight, // Добавляем в возвращаемый объект
     loading,
     error,
     paymentStatus,
     paymentMessage,
     insufficientItems,
     fetchCartProducts,
+    fetchCartWeight, // Добавляем в возвращаемый объект
+    fetchCart,
     addCart,
     removeFromCart,
     processPayment,

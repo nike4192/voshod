@@ -56,7 +56,7 @@
       <ProgressSpinner />
       <p>Загрузка...</p>
     </div>
-    <div v-else-if="cartProducts.length === 0">
+    <div v-else-if="cartStore.cartProducts.length === 0">
       <div class="empty-cart">
         <i class="pi pi-shopping-cart empty-cart-icon"></i>
         <h2>Корзина пуста</h2>
@@ -69,7 +69,7 @@
       <div v-if="currentStep === 'cart'" class="cart-step">
         <div class="flex flex-column lg:flex-row">
           <div class="cart-items lg:w-8 pr-0 lg:pr-3">
-            <div v-for="item in cartProducts" :key="item.id"
+            <div v-for="item in cartStore.cartProducts" :key="item.id"
                  class="flex flex-row flex-wrap cart-item border-round-lg w-full align-items-center mb-3">
               <div class="cart-item-image mr-3">
                 <img
@@ -100,7 +100,7 @@
             <div class="p-4 border-round-lg summary-box">
               <h3>Итого:</h3>
               <div class="summary-row">
-                <span>Товары ({{ getTotalQuantity() }} шт.):</span>
+                <span>Товары ({{  cartStore.totalQuantity }} шт.):</span>
                 <span>{{ cartStore.totalPrice }} ₽</span>
               </div>
               <div class="summary-row total">
@@ -199,13 +199,13 @@
             <div class="p-4 border-round-lg summary-box">
               <h3>Ваш заказ</h3>
               <div class="order-items mb-3">
-                <div v-for="item in cartProducts" :key="item.id" class="order-item">
-                  <span>{{ item.name }} x {{ item.quantity }}</span>
+                <div v-for="item in cartStore.cartProducts" :key="item.id" class="order-item">
+                  <span class="mr-4">{{ item.name }} x {{ item.quantity }}</span>
                   <span>{{ item.price * item.quantity }} ₽</span>
                 </div>
               </div>
               <div class="summary-row">
-                <span>Товары ({{ getTotalQuantity() }} шт.):</span>
+                <span>Товары ({{  cartStore.totalQuantity }} шт.):</span>
                 <span>{{ cartStore.totalPrice }} ₽</span>
               </div>
               <div class="summary-row total">
@@ -233,6 +233,12 @@
     </div>
   </div>
 </div>
+    <div v-if="currentStep === 'cart'" class="cart-summary mt-3">
+    <div class="flex justify-content-between">
+      <span class="font-bold">Общий вес:</span>
+      <span>{{ cartStore.totalWeight.toFixed(2) }} кг</span>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -243,7 +249,6 @@ import { required, email, helpers } from '@vuelidate/validators';
 
 const router = useRouter();
 const cartStore = useCart();
-const { cartProducts } = storeToRefs(cartStore);
 
 // Текущий шаг оформления заказа
 const currentStep = ref('cart');
@@ -298,9 +303,6 @@ const removeItem = async (productId) => {
   await cartStore.removeFromCart(productId);
 };
 
-const getTotalQuantity = () => {
-  return cartProducts.value.reduce((total, item) => total + item.quantity, 0);
-};
 
 const goToDelivery = () => {
   currentStep.value = 'delivery';

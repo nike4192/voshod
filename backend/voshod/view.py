@@ -64,47 +64,59 @@ def add_cart(request, product_id):
 @api_view(['GET'])
 def get_cart(request):
     cart = request.session.get('cart', {})
-    return JsonResponse({'cart': cart})
 
+    # Подсчитываем общее количество товаров
+    total_quantity = 0
+    for item_data in cart.values():
+        total_quantity += item_data['quantity']
+
+    return JsonResponse({
+        'cart': cart,
+        'total_quantity': total_quantity
+    })
 
 @api_view(['GET'])
 def get_cart_products(request):
     cart = request.session.get('cart', {})
-
-    # Создаем список товаров в корзине
     cart_products = []
-    total_price = 0  # Инициализируем общую стоимость
+    total_price = 0
+    total_quantity = 0
 
-    for product_id, item in cart.items():
+    for product_id, item_data in cart.items():
         try:
-            product = Product.objects.get(id=product_id)
-            item_price = product.price * item['quantity']  # Рассчитываем стоимость для данного товара
-            total_price += item_price  # Добавляем к общей стоимости
+            product = Product.objects.get(pk=product_id)
+            quantity = item_data['quantity']
+            total_quantity += quantity
+            item_price = product.price * quantity
+            total_price += item_price
 
             # Формируем URL изображения, если оно есть
             image_url = None
             if product.image:
+                # Используйте абсолютный URL для изображения
                 image_url = request.build_absolute_uri(product.image.url)
 
             cart_products.append({
                 'id': product.id,
                 'name': product.name,
-                'description': product.description,
+                'description': product.description,  # Добавлено из второй версии
                 'price': product.price,
-                'quantity': item['quantity'],
-                'item_total': item_price,
+                'quantity': quantity,
                 'image_url': image_url,
+                'total': item_price,
+                'item_total': item_price  # Добавлено для совместимости со второй версией
             })
         except Product.DoesNotExist:
-            # Если товар не найден, пропускаем его
-            continue
+            # Удаляем товар из корзины, если он не найден
+            del cart[product_id]
+            request.session.modified = True
 
     return JsonResponse({
-        'status': 'success',
+        'status': 'success',  # Добавлено из второй версии
         'cart_products': cart_products,
-        'total_price': total_price
+        'total_price': total_price,
+        'total_quantity': total_quantity
     })
-
 
 @api_view(['DELETE'])
 def remove_from_cart(request, product_id):
@@ -220,8 +232,37 @@ def process_payment(request):
                 'order_id': order.id
             })
 
+
     except Exception as e:
         print(f"Error processing payment: {str(e)}")
         import traceback
         traceback.print_exc()
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@api_view(['GET'])
+def get_cart_weight(request):
+    cart = request.session.get('cart', {})
+    total_weight = 0
+
+    for product_id, item_data in cart.items():
+        try:
+            product = Product.objects.get(pk=product_id)
+            # Проверяем формат данных в корзине
+            if isinstance(item_data, dict) and 'quantity' in item_data:
+                quantity = item_data['quantity']
+            else:
+                quantity = item_data  # Если quantity хранится напрямую
+
+            # Умножаем вес товара на его количество в корзине
+            total_weight += float(product.weight) * quantity
+        except Product.DoesNotExist:
+            # Пропускаем товары, которых нет в базе данных
+            continue
+        except Exception as e:
+            print(f"Ошибка при расчете веса для товара {product_id}: {str(e)}")
+
+    return JsonResponse({
+        'status': 'success',
+        'total_weight': total_weight
+    })
