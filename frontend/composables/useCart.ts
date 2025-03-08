@@ -139,7 +139,7 @@ export const useCart = defineStore('cart', () => {
       loading.value = false;
     }
   }
-
+// asd
 
   return {
     cartProducts,

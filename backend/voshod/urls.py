@@ -38,3 +38,4 @@ urlpatterns = [
     path('api/process_payment/', process_payment, name='process_payment'),
     path('api/get-csrf-token/', get_csrf_token, name='get-csrf-token'),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# asd

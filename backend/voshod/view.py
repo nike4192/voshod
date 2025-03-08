@@ -266,3 +266,4 @@ def get_cart_weight(request):
         'status': 'success',
         'total_weight': total_weight
     })
+# ads

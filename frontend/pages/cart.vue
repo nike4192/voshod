@@ -298,7 +298,7 @@ const v$ = useVuelidate(rules, customerData);
 const home = () => {
   router.push('/');
 };
-
+// asd
 const removeItem = async (productId) => {
   await cartStore.removeFromCart(productId);
 };
