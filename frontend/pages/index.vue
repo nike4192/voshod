@@ -54,7 +54,7 @@ const basket = () => {
 
 onMounted(async () => {
   const productStore = await useProducts();
-  await cartStore.fetchCart()
+  await cartStore.fetchCartProducts()
   products.value = productStore.products;
   error.value = productStore.error;
 

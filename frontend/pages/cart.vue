@@ -56,7 +56,7 @@
       <ProgressSpinner />
       <p>Загрузка...</p>
     </div>
-    <div v-else-if="cartStore.cartProducts.length === 0">
+    <div v-else-if="cartProducts.length === 0">
       <div class="empty-cart">
         <i class="pi pi-shopping-cart empty-cart-icon"></i>
         <h2>Корзина пуста</h2>
@@ -69,7 +69,7 @@
       <div v-if="currentStep === 'cart'" class="cart-step">
         <div class="flex flex-column lg:flex-row">
           <div class="cart-items lg:w-8 pr-0 lg:pr-3">
-            <div v-for="item in cartStore.cartProducts" :key="item.id"
+            <div v-for="item in cartProducts" :key="item.id"
                  class="flex flex-row flex-wrap cart-item border-round-lg w-full align-items-center mb-3">
               <div class="cart-item-image mr-3">
                 <img
@@ -199,7 +199,7 @@
             <div class="p-4 border-round-lg summary-box">
               <h3>Ваш заказ</h3>
               <div class="order-items mb-3">
-                <div v-for="item in cartStore.cartProducts" :key="item.id" class="order-item">
+                <div v-for="item in cartProducts" :key="item.id" class="order-item">
                   <span>{{ item.name }} x {{ item.quantity }}</span>
                   <span>{{ item.price * item.quantity }} ₽</span>
                 </div>
@@ -243,6 +243,7 @@ import { required, email, helpers } from '@vuelidate/validators';
 
 const router = useRouter();
 const cartStore = useCart();
+const { cartProducts } = storeToRefs(cartStore);
 
 // Текущий шаг оформления заказа
 const currentStep = ref('cart');
@@ -298,7 +299,7 @@ const removeItem = async (productId) => {
 };
 
 const getTotalQuantity = () => {
-  return cartStore.cartProducts.reduce((total, item) => total + item.quantity, 0);
+  return cartProducts.value.reduce((total, item) => total + item.quantity, 0);
 };
 
 const goToDelivery = () => {

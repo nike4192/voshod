@@ -39,10 +39,6 @@ export const useCart = defineStore('useCart', function useCart() {
     cartProducts.value = (await $fetch<Product[]>('/api/cart/' + productId + '/', {baseURL: 'http://localhost', method: "POST"})).cart;
   }
 
-  async function fetchCart() {
-    cartProducts.value = (await $fetch<Product[]>('/api/cart/', {baseURL: 'http://localhost'})).cart;
-  }
-
   async function removeFromCart(productId) {
     loading.value = true;
     try {
@@ -99,7 +95,6 @@ export const useCart = defineStore('useCart', function useCart() {
     paymentMessage,
     insufficientItems,
     fetchCartProducts,
-    fetchCart,
     addCart,
     removeFromCart,
     processPayment,
