@@ -51,6 +51,9 @@ CSRF_COOKIE_HTTPONLY = False  # False позволяет JavaScript читать
 CSRF_USE_SESSIONS = False  # Храним токен в cookie, а не в сессии
 CSRF_COOKIE_NAME = 'csrftoken'  # Стандартное имя, которое ожидает Django
 CSRF_HEADER_NAME = 'X-CSRFToken'  # Заголовок для проверки токена
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS", default=[]
+)
 
 # Security Settings
 X_FRAME_OPTIONS = "SAMEORIGIN"
