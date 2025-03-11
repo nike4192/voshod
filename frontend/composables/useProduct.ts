@@ -8,7 +8,7 @@ export interface Product {
 }
 
 export async function useProducts() {
-  const products = await $fetch<Product[]>('/api/product/', {baseURL: 'http://localhost'});
+  const products = await $fetch<Product[]>('/api/product/');
   const error = null;
 
   console.log(products, error,);
