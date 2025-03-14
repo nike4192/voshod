@@ -20,7 +20,7 @@ from .serializers import ProductViewSet
 from rest_framework.routers import DefaultRouter
 from django.conf.urls.static import static
 from django.conf import settings
-from voshod.view import get_cart, add_cart, get_cart_products, remove_from_cart, process_payment, get_cart_weight
+from voshod.view import get_cart, add_cart, get_cart_products, remove_from_cart, process_payment, get_cart_weight, normalize_address
 
 from .view import get_csrf_token
 
@@ -37,5 +37,6 @@ urlpatterns = [
     path('api/cart/remove/<product_id>/', remove_from_cart, name='remove_from_cart'),
     path('api/process_payment/', process_payment, name='process_payment'),
     path('api/get-csrf-token/', get_csrf_token, name='get-csrf-token'),
+    path('api/normalize-address/', normalize_address, name='normalize_address'),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 # asd

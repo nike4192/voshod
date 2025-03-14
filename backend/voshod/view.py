@@ -267,3 +267,108 @@ def get_cart_weight(request):
         'total_weight': total_weight
     })
 # ads
+from django.http import JsonResponse
+from rest_framework.decorators import api_view
+from django.conf import settings
+from .pochta_api import PochtaAPI
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Инициализация API Почты России
+pochta_api = PochtaAPI(
+    token=settings.POCHTA_API_TOKEN,
+    key=settings.POCHTA_API_KEY
+)
+
+
+@api_view(['POST'])
+def normalize_address(request):
+    """
+    Нормализация адреса через API Почты России
+    """
+    try:
+        data = request.data
+        address = data.get('address')
+
+        if not address:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Адрес не указан'
+            }, status=400)
+
+        # Логирование для отладки
+        logger.info(f"Normalizing address: {address}")
+
+        # Вызов API для нормализации адреса
+        result = pochta_api.normalize_address(address)
+
+        if isinstance(result, dict) and 'error' in result:
+            return JsonResponse({
+                'status': 'error',
+                'message': result['error']
+            }, status=400)
+
+        # Проверка качества нормализации
+        quality_code = result.get('quality-code', '')
+
+        # Формирование структурированного ответа
+        response_data = {
+            'status': 'success',
+            'original_address': address,
+            'normalized_address': result.get('address-normalized', ''),
+            'quality': {
+                'code': quality_code,
+                'description': self._get_quality_description(quality_code)
+            },
+            'is_valid': self._is_valid_quality(quality_code),
+            'postal_code': result.get('index', ''),
+            'details': {
+                'region': result.get('region', ''),
+                'area': result.get('area', ''),
+                'place': result.get('place', ''),
+                'street': result.get('street', ''),
+                'house': result.get('house', ''),
+                'room': result.get('room', ''),
+                'corpus': result.get('corpus', ''),
+                'building': result.get('building', ''),
+                'letter': result.get('letter', '')
+            },
+            'raw_response': result
+        }
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error in normalize_address: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+    def _get_quality_description(self, quality_code):
+        """
+        Получение описания кода качества нормализации
+        """
+        quality_descriptions = {
+            'GOOD': 'Все элементы адреса распознаны уверенно',
+            'POSTAL_BOX': 'Почтовый ящик',
+            'ON_DEMAND': 'До востребования',
+            'UNDEF_05': 'Неоднозначность, связанная с регионами',
+            'UNDEF_01': 'Неоднозначность, связанная с районами',
+            'UNDEF_02': 'Неоднозначность, связанная с городами',
+            'UNDEF_03': 'Неоднозначность, связанная с населенными пунктами',
+            'UNDEF_04': 'Неоднозначность, связанная с улицами',
+            'UNDEF_06': 'Неоднозначность, связанная с домами',
+            'UNDEF_07': 'Иная неоднозначность',
+            'INCORRECT': 'Адрес распознан с ошибками',
+            'ACCURATE': 'Адрес распознан с предупреждениями',
+        }
+        return quality_descriptions.get(quality_code, 'Неизвестный код качества')
+
+    def _is_valid_quality(self, quality_code):
+        """
+        Проверка, является ли код качества допустимым для использования
+        """
+        valid_codes = ['GOOD', 'POSTAL_BOX', 'ON_DEMAND', 'ACCURATE']
+        return quality_code in valid_codes

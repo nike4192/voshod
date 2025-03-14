@@ -141,6 +141,23 @@ export const useCart = defineStore('cart', () => {
   }
 // asd
 
+  async function normalizeAddress(address: string) {
+  loading.value = true;
+  try {
+    const response = await axios.post('/api/normalize-address/', { address });
+    return response.data;
+  } catch (err) {
+    console.error('Ошибка при нормализации адреса:', err);
+    error.value = err;
+    return {
+      status: 'error',
+      message: err.response?.data?.message || err.message
+    };
+  } finally {
+    loading.value = false;
+  }
+}
+
   return {
     cartProducts,
     totalPrice,
@@ -156,6 +173,7 @@ export const useCart = defineStore('cart', () => {
     fetchCart,
     addCart,
     removeFromCart,
+    normalizeAddress,
     processPayment,
   };
 });
