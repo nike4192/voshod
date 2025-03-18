@@ -107,55 +107,73 @@ export const useCart = defineStore('cart', () => {
   }
 
   // Обработка оплаты
-  async function processPayment(customerData = {}) {
-    loading.value = true;
-    paymentStatus.value = '';
-    paymentMessage.value = '';
-    insufficientItems.value = [];
-
-    try {
-      const response = await axios.post('/api/process_payment/', customerData);
-      paymentStatus.value = 'success';
-      paymentMessage.value = response.data.message;
-      // Очищаем корзину после успешной оплаты
-      cartProducts.value = [];
-      totalPrice.value = 0;
-      return true;
-    } catch (err) {
-      console.error('Ошибка при обработке оплаты:', err);
-      error.value = err;
-      paymentStatus.value = 'error';
-
-      if (err.response && err.response.data) {
-        paymentMessage.value = err.response.data.message;
-        if (err.response.data.insufficient_items) {
-          insufficientItems.value = err.response.data.insufficient_items;
-        }
-      } else {
-        paymentMessage.value = 'Произошла ошибка при обработке оплаты';
-      }
-      return false;
-    } finally {
-      loading.value = false;
-    }
-  }
-// asd
-
-  async function normalizeAddress(address: string) {
+  async function processPayment(customerData = {}, normalizedAddress = null) {
   loading.value = true;
+  paymentStatus.value = '';
+  paymentMessage.value = '';
+  insufficientItems.value = [];
+
   try {
-    const response = await axios.post('/api/normalize-address/', { address });
+    // Подготовка данных для отправки, включая нормализованный адрес
+    const paymentData = {
+      ...customerData,
+      normalized_address: normalizedAddress
+    };
+
+    const response = await axios.post('/api/process_payment/', paymentData);
+
+    // Обработка ответа
+    paymentStatus.value = response.data.status;
+    paymentMessage.value = response.data.message;
+
+    if (response.data.insufficient_items) {
+      insufficientItems.value = response.data.insufficient_items;
+    }
+
+    if (response.data.status === 'success') {
+      // Очистка корзины после успешной оплаты
+      cartProducts.value = [];
+      totalQuantity.value = 0;
+      totalPrice.value = 0;
+      totalWeight.value = 0;
+    }
+
     return response.data;
   } catch (err) {
-    console.error('Ошибка при нормализации адреса:', err);
+    console.error('Ошибка при обработке платежа:', err);
     error.value = err;
-    return {
-      status: 'error',
-      message: err.response?.data?.message || err.message
-    };
+    paymentStatus.value = 'error';
+    paymentMessage.value = 'Произошла ошибка при обработке платежа';
+    return { status: 'error', message: 'Произошла ошибка при обработке платежа' };
   } finally {
     loading.value = false;
   }
+}
+// asd
+
+async function normalizeAddress(address) {
+  try {
+    const response = await fetch('/api/normalize-address/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ address })
+    });
+
+    const data = await response.json();
+    console.log('Response:', data);
+    return data;
+  } catch (error) {
+    console.error('Error:', error);
+    throw error;
+  }
+}
+function saveNormalizedAddress(normalizedAddress) {
+  // Сохраняем нормализованный адрес в хранилище
+  // Это может пригодиться при оформлении заказа
+  const addressData = normalizedAddress?.normalized_address || {};
+  return addressData;
 }
 
   return {
@@ -175,5 +193,6 @@ export const useCart = defineStore('cart', () => {
     removeFromCart,
     normalizeAddress,
     processPayment,
+    saveNormalizedAddress
   };
 });

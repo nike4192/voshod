@@ -1,8 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import {NuxtConfig} from '@nuxt/types';
 import Aura from '@primevue/themes/aura';
-
-
+import AutoComplete from 'primevue/autocomplete';
+import PrimeVue from 'primevue/config';
+import ToastService from 'primevue/toastservice';
 export default defineNuxtConfig({
     compatibilityDate: '2025-02-21',
 
@@ -36,12 +37,23 @@ export default defineNuxtConfig({
         }
     },
 
-    modules: ['@primevue/nuxt-module', '@pinia/nuxt'],
+
+        modules: ['@primevue/nuxt-module', '@pinia/nuxt'],
     primevue: {
+        components: {
+            include: ['AutoComplete', 'Button', 'InputText', 'Toast']
+        },
         options: {
+            ripple: true,
             theme: {
                 preset: Aura,
             },
+        },
+        directives: {
+            include: ['Tooltip', 'Ripple']
+        },
+        composables: {
+            include: ['useToast', 'useConfirm']
         }
     }
 });

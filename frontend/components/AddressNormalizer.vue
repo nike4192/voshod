@@ -2,175 +2,282 @@
   <div class="address-normalizer">
     <div class="p-field">
       <label for="address">Адрес доставки</label>
-      <div class="p-inputgroup">
-        <InputText
+      <AutoComplete
           id="address"
           v-model="address"
           class="w-full"
           placeholder="Введите адрес доставки"
-          :class="{ 'p-invalid': v$.delivery_address.$invalid && v$.delivery_address.$dirty }"
-        />
-        <Button
-          icon="pi pi-check"
-          @click="normalizeUserAddress"
-          :loading="normalizing"
-          :disabled="!address"
-        />
-      </div>
-      <small v-if="v$.delivery_address.$invalid && v$.delivery_address.$dirty" class="p-error">
-        {{ v$.delivery_address.$errors[0].$message }}
+          :suggestions="suggestions"
+          @complete="searchAddress"
+          @item-select="onAddressSelected"
+          :dropdown="true"
+          :class="{ 'p-invalid': hasError }"
+          optionLabel="text"
+          :loading="loading"
+          :delay="500"
+          :minLength="3"
+      />
+      <small v-if="hasError" class="p-error">
+        Пожалуйста, введите адрес доставки
       </small>
     </div>
 
-    <div v-if="normalizationResult" class="mt-3">
-      <div v-if="normalizationResult.status === 'success'" class="p-card p-3">
-        <div class="address-result">
-          <h4>Нормализованный адрес:</h4>
-          <p class="normalized-address">{{ normalizationResult.normalized_address }}</p>
-
-          <div class="quality-info" :class="{
-            'quality-good': normalizationResult.is_valid,
-            'quality-bad': !normalizationResult.is_valid
-          }">
-            <i :class="normalizationResult.is_valid ? 'pi pi-check-circle' : 'pi pi-exclamation-triangle'"></i>
-            <span>{{ normalizationResult.quality.description }}</span>
-          </div>
-
-          <div v-if="normalizationResult.postal_code" class="postal-code">
-            <strong>Почтовый индекс:</strong> {{ normalizationResult.postal_code }}
-          </div>
-
-          <Button
-            v-if="normalizationResult.is_valid"
-            label="Использовать этот адрес"
-            class="p-button-success mt-3"
-            @click="useNormalizedAddress"
-          />
-        </div>
+    <!-- Отображение информации о нормализованном адресе, если она есть -->
+    <div v-if="normalizationResult && normalizationResult.status" class="normalization-result mt-2">
+      <div v-if="normalizationResult.status === 'success'" class="success-message">
+        <i class="pi pi-check-circle mr-2"></i>
+        <small>Адрес успешно проверен</small>
       </div>
-      <div v-else class="p-card p-3 error-result">
-        <i class="pi pi-times-circle"></i>
-        <p>{{ normalizationResult.message }}</p>
+      <div v-else class="error-message">
+        <i class="pi pi-exclamation-circle mr-2"></i>
+        <small>{{ normalizationResult.message }}</small>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useVuelidate } from '@vuelidate/core';
-import { required } from '@vuelidate/validators';
-import { useCart } from '~/composables/useCart.js';
-import InputText from 'primevue/inputtext';
-import Button from 'primevue/button';
+import { ref, defineEmits, defineProps, watch, computed } from 'vue';
+import AutoComplete from 'primevue/autocomplete';
+import axios from 'axios';
 
 const props = defineProps({
   modelValue: {
     type: String,
     default: ''
   },
-  validationRules: {
-    type: Object,
-    default: () => ({ required })
+  error: {
+    type: Boolean,
+    default: false
   }
 });
 
 const emit = defineEmits(['update:modelValue', 'address-normalized']);
 
-const cartStore = useCart();
-const address = ref(props.modelValue);
+const address = ref(props.modelValue || '');
 const normalizing = ref(false);
+const loading = ref(false);
 const normalizationResult = ref(null);
+const suggestions = ref([]);
 
-// Валидация
-const rules = {
-  delivery_address: props.validationRules
-};
+// Вычисляемое свойство для отображения ошибки
+const hasError = computed(() => props.error);
 
-const v$ = useVuelidate(rules, {
-  delivery_address: address
-});
-
-// Следим за изменениями входного значения
-watch(() => props.modelValue, (newValue) => {
-  address.value = newValue;
-});
-
-// Следим за изменениями локального значения
+// Обновление родительского значения при изменении адреса
 watch(address, (newValue) => {
   emit('update:modelValue', newValue);
 });
 
-async function normalizeUserAddress() {
-  if (!address.value) return;
+// Функция для поиска адресов (автозаполнение)
+async function searchAddress(event) {
+  if (event.query.trim().length > 3) {
+    loading.value = true;
+    try {
+      // Отправляем запрос для получения вариантов адресов
+      const response = await axios.post('/api/address-suggestions/', {
+        query: event.query
+      });
+
+      console.log('API Response for suggestions:', response.data);
+
+      // Проверяем успешность ответа и наличие массива подсказок
+      if (response.data.status === 'success' && Array.isArray(response.data.suggestions)) {
+        // Используем подсказки из ответа API
+        suggestions.value = response.data.suggestions;
+
+        // Если подсказок нет, добавляем введенный текст как подсказку
+        if (suggestions.value.length === 0) {
+          suggestions.value = [{
+            text: event.query,
+            value: event.query
+          }];
+        }
+      } else {
+        // Если API не вернуло подсказки, создаем одну подсказку из введенного текста
+        suggestions.value = [{
+          text: event.query,
+          value: event.query
+        }];
+      }
+    } catch (error) {
+      console.error('Ошибка при получении подсказок адресов:', error);
+      suggestions.value = [{
+        text: event.query,
+        value: event.query
+      }];
+    } finally {
+      loading.value = false;
+    }
+  } else {
+    suggestions.value = [];
+  }
+}
+
+// Обработка выбора адреса из подсказок
+function onAddressSelected(event) {
+  console.log('Selected item:', event);
+
+  // Проверяем, что у нас есть выбранный элемент
+  if (!event || !event.value) {
+    console.error('No selected item or value');
+    return;
+  }
+
+  // Обновляем значение адреса
+  if (typeof event.value === 'object') {
+    // Если event.value - это объект
+    if (event.value.value) {
+      address.value = event.value.value;
+    } else if (event.value.text) {
+      address.value = event.value.text;
+    }
+
+    // Если у нас есть оригинальный объект с нормализованным адресом, сохраняем его
+    if (event.value.original) {
+      normalizationResult.value = {
+        status: 'success',
+        message: 'Адрес нормализован',
+        is_valid: true,
+        normalized_address: event.value.original,
+        quality: {
+          code: 'GOOD', // Предполагаем, что качество хорошее, так как это результат нормализации
+          description: 'Адрес полностью нормализован'
+        }
+      };
+
+      // Уведомляем родительский компонент о нормализованном адресе
+      emit('address-normalized', normalizationResult.value);
+    }
+  } else if (typeof event.value === 'string') {
+    // Если event.value - это строка
+    address.value = event.value;
+  }
+
+  // Отправляем обновленное значение в родительский компонент
+  emit('update:modelValue', address.value);
+
+  // Очищаем подсказки
+  suggestions.value = [];
+}
+// Функция нормализации адреса (будет вызываться из родительского компонента)
+async function normalizeAddress() {
+  if (!address.value) return null;
+
+  // Если у нас уже есть нормализованный результат, возвращаем его
+  if (normalizationResult.value &&
+      normalizationResult.value.status === 'success' &&
+      normalizationResult.value.normalized_address) {
+    return normalizationResult.value;
+  }
 
   normalizing.value = true;
   try {
-    normalizationResult.value = await cartStore.normalizeAddress(address.value);
+    const response = await axios.post('/api/normalize-address/', {
+      address: address.value
+    });
 
-    // Если нормализация успешна, уведомляем родительский компонент
-    if (normalizationResult.value.status === 'success') {
-      emit('address-normalized', normalizationResult.value);
+    console.log('Normalized address response:', response.data);
+
+    if (response.data.status === 'success') {
+      normalizationResult.value = {
+        status: 'success',
+        message: response.data.message || 'Адрес успешно нормализован',
+        is_valid: true,
+        normalized_address: response.data.normalized_address || {},
+        quality: {
+          code: response.data.quality_code || 'GOOD',
+          description: response.data.quality_description || 'Адрес полностью нормализован'
+        }
+      };
+    } else {
+      normalizationResult.value = {
+        status: 'error',
+        message: response.data.message || 'Не удалось нормализовать адрес',
+        is_valid: false,
+        normalized_address: {},
+        quality: {
+          code: '',
+          description: ''
+        }
+      };
     }
+
+    // Уведомляем родительский компонент о результате нормализации
+    emit('address-normalized', normalizationResult.value);
+
+    return normalizationResult.value;
   } catch (error) {
     console.error('Ошибка при нормализации адреса:', error);
+    const errorResult = {
+      status: 'error',
+      message: 'Произошла ошибка при нормализации адреса',
+      is_valid: false,
+      normalized_address: {},
+      quality: {
+        code: '',
+        description: ''
+      }
+    };
+
+    normalizationResult.value = errorResult;
+    emit('address-normalized', errorResult);
+
+    return errorResult;
   } finally {
     normalizing.value = false;
   }
 }
 
-function useNormalizedAddress() {
-  if (normalizationResult.value && normalizationResult.value.status === 'success') {
-    address.value = normalizationResult.value.normalized_address;
-    emit('update:modelValue', address.value);
-  }
-}
+// Экспортируем функцию нормализации для использования в родительском компоненте
+defineExpose({ normalizeAddress });
 </script>
 
 <style scoped>
 .address-normalizer {
-  max-width: 100%;
+  margin-bottom: 1rem;
 }
 
-.normalized-address {
-  font-weight: 500;
-  margin: 10px 0;
-}
-
-.quality-info {
-  display: flex;
-  align-items: center;
-  padding: 8px;
+/* Стили для результата нормализации */
+.normalization-result {
+  padding: 0.5rem;
   border-radius: 4px;
-  margin: 10px 0;
+  margin-top: 0.5rem;
 }
 
-.quality-info i {
-  margin-right: 8px;
-}
-
-.quality-good {
-  background-color: #e6f7e6;
-  color: #2c8c2c;
-}
-
-.quality-bad {
-  background-color: #fff2e6;
-  color: #cc7700;
-}
-
-.postal-code {
-  margin-top: 10px;
-}
-
-.error-result {
-  color: #cc0000;
+.success-message {
+  color: #2c9f2c;
   display: flex;
   align-items: center;
 }
 
-.error-result i {
-  margin-right: 8px;
-  font-size: 1.5rem;
+.error-message {
+  color: #e24c4c;
+  display: flex;
+  align-items: center;
+}
+
+/* Дополнительные стили для автозаполнения */
+:deep(.p-autocomplete) {
+  width: 100%;
+}
+
+:deep(.p-autocomplete-panel) {
+  max-width: 100%;
+  z-index: 1000;
+}
+
+:deep(.p-autocomplete-items) {
+  padding: 0.5rem 0;
+}
+
+:deep(.p-autocomplete-item) {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  white-space: normal;
+  word-break: break-word;
+}
+
+:deep(.p-autocomplete-item:hover) {
+  background-color: #f5f5f5;
 }
 </style>

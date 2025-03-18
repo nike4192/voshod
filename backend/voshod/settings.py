@@ -22,8 +22,8 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Настройки API Почты России
-POCHTA_API_TOKEN = 'AccessToken zmI6LeNHjYFpbD_g04BLbg3sHOZz6GFK'  # Замените на ваш токен
-POCHTA_API_KEY = 'Basic d29jeG9kLnZzaGRAeWFuZGV4LnJ1OndvY3hvZCFnb2RubzE='     # Замените на ваш ключ
+POCHTA_API_TOKEN = 'zmI6LeNHjYFpbD_g04BLbg3sHOZz6GFK'  # Замените на ваш токен
+POCHTA_API_KEY = 'd29jeG9kLnZzaGRAeWFuZGV4LnJ1OndvY3hvZCFnb2RubzE='     # Замените на ваш ключ
 
 env = Env()
 env.read_env()

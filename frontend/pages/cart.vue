@@ -120,14 +120,14 @@
 
         <!-- Шаг 2: Форма доставки -->
         <div v-if="currentStep === 'delivery'" class="delivery-step">
-          <h3>Информация о доставке</h3>
-
-          <form @submit.prevent="goToConfirmation">
-            <div class="p-grid">
-              <div class="p-col-12 p-md-6">
-                <div class="p-field">
-                  <label for="customer_name">Ваше имя</label>
-                  <InputText
+          <h2>Информация о доставке</h2>
+          <div class="p-fluid">
+            <form @submit.prevent="goToConfirmation">
+              <div class="p-grid">
+                <div class="p-col-12 p-md-6">
+                  <div class="p-field">
+                    <label for="customer_name">Ваше имя</label>
+                    <InputText
                       id="customer_name"
                       v-model="customerData.customer_name"
                       class="w-full"
@@ -173,9 +173,11 @@
                 <!-- Интеграция компонента AddressNormalizer -->
                 <AddressNormalizer
                     v-model="customerData.delivery_address"
-                    :validation-rules="{ required: helpers.withMessage('Пожалуйста, введите адрес доставки', required) }"
+                    :error="v$.delivery_address.$invalid && v$.delivery_address.$dirty"
+                    ref="addressNormalizerRef"
                     @address-normalized="handleAddressNormalized"
                 />
+
               </div>
 
               <div class="p-col-12">
@@ -241,10 +243,10 @@
               </div>
             </div>
 
-            <div class="button-row mt-4">
-              <Button type="button" @click="goToCart" label="Назад" class="p-button-outlined mr-2"/>
-              <Button type="submit" label="Продолжить" :disabled="!canProceedToConfirmation"/>
-            </div>
+      <div class="flex justify-content-between mt-4">
+        <Button label="Назад к корзине" @click="goToCart" outlined />
+        <Button label="Продолжить" @click="validateAndGoToConfirmation" />
+      </div>
           </form>
         </div>
       </div>
@@ -256,20 +258,24 @@
       <span>{{ cartStore.totalWeight.toFixed(2) }} кг</span>
     </div>
   </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { useCart } from '~/composables/useCart.js';
+import { ref, onMounted } from 'vue';
 import { useVuelidate } from '@vuelidate/core';
 import { required, email, helpers } from '@vuelidate/validators';
+import { useRouter } from 'vue-router';
+import { useCart } from '@/composables/useCart';
+import AddressNormalizer from '@/components/AddressNormalizer.vue';
+import { useToast } from 'primevue/usetoast';
 import InputText from 'primevue/inputtext';
-import Textarea from 'primevue/textarea';
 import Button from 'primevue/button';
-import AddressNormalizer from '~/components/AddressNormalizer.vue';
 
 const router = useRouter();
 const cartStore = useCart();
+const toast = useToast();
+const addressNormalizerRef = ref(null);
 
 // Текущий шаг оформления заказа
 const currentStep = ref('cart');
@@ -356,12 +362,7 @@ const confirmOrder = async () => {
 // Обработчик события нормализации адреса
 function handleAddressNormalized(result) {
   normalizedAddressInfo.value = result;
-
-  // Сохраняем почтовый индекс для дальнейшего использования при расчете доставки
-  if (result.postal_code) {
-    // Можно сохранить в отдельное поле или в локальное хранилище
-    localStorage.setItem('delivery_postal_code', result.postal_code);
-  }
+  console.log('Normalized address info:', result);
 }
 
 function goToCart() {
@@ -378,6 +379,62 @@ function goToConfirmation() {
     // Можно добавить уведомление пользователю
     // toast.error('Пожалуйста, заполните все обязательные поля');
   }
+}
+
+async function validateAndGoToConfirmation() {
+  // Сначала проверяем валидность формы
+  const isFormValid = await v$.value.$validate();
+  if (!isFormValid) {
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка валидации',
+      detail: 'Пожалуйста, заполните все обязательные поля корректно',
+      life: 3000
+    });
+    return;
+  }
+
+  // Если у нас еще нет нормализованного адреса, пробуем его получить
+  if (!normalizedAddressInfo.value || normalizedAddressInfo.value.status !== 'success') {
+    try {
+      const normalizationResult = await addressNormalizerRef.value.normalizeAddress();
+
+      if (!normalizationResult || normalizationResult.status === 'error') {
+        toast.add({
+          severity: 'error',
+          summary: 'Ошибка адреса',
+          detail: normalizationResult?.message || 'Не удалось проверить адрес',
+          life: 3000
+        });
+        return;
+      }
+
+      // Обновляем информацию о нормализованном адресе
+      normalizedAddressInfo.value = normalizationResult;
+
+      // Если адрес имеет предупреждения, показываем их пользователю
+      if (normalizationResult.quality && normalizationResult.quality.code !== 'GOOD') {
+        toast.add({
+          severity: 'warn',
+          summary: 'Предупреждение',
+          detail: `Возможна проблема с адресом: ${normalizationResult.quality.description}`,
+          life: 5000
+        });
+      }
+    } catch (error) {
+      console.error('Ошибка при проверке адреса:', error);
+      toast.add({
+        severity: 'error',
+        summary: 'Ошибка',
+        detail: 'Произошла ошибка при проверке адреса',
+        life: 3000
+      });
+      return;
+    }
+  }
+
+  // Переходим к подтверждению
+  currentStep.value = 'confirmation';
 }
 
 
