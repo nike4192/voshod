@@ -144,16 +144,15 @@ def remove_from_cart(request, product_id):
 @api_view(['POST'])
 def process_payment(request):
     cart = request.session.get('cart', {})
-
     if not cart:
         return JsonResponse({'status': 'error', 'message': 'Корзина пуста'}, status=400)
 
-    # Отладочная информация
-    print(f"Cart contents: {cart}")
+    # Получаем данные из запроса
+    data = request.data
+    print(f"Received payment data: {data}")
 
     # Проверяем наличие товаров на складе
     insufficient_stock = []
-
     for product_id, item in cart.items():
         try:
             product = Product.objects.get(id=product_id)
@@ -190,60 +189,61 @@ def process_payment(request):
                 total_price += product.price * item['quantity']
 
             # Получаем данные пользователя из запроса
-            customer_name = request.data.get('customer_name', 'Гость')
-            customer_email = request.data.get('customer_email', '')
-            customer_phone = request.data.get('customer_phone', '')
+            # Используем правильные имена полей, соответствующие фронтенду
+            customer_name = data.get('customer_name', '')
+            customer_email = data.get('customer_email', '')
+            customer_phone = data.get('customer_phone', '')
+            customer_address = data.get('delivery_address', '')
+            postal_code = ''
 
-            print(
-                f"Creating order: name={customer_name}, email={customer_email}, phone={customer_phone}, total={total_price}")
+            # Если есть нормализованный адрес, используем данные из него
+            normalized_address = data.get('normalized_address', {})
+            if normalized_address:
+                # Если есть индекс в нормализованном адресе, используем его
+                if normalized_address.get('index'):
+                    postal_code = normalized_address.get('index')
 
-            # Создаем заказ
+            # Создаем заказ с адресом и индексом
             order = Order.objects.create(
                 customer_name=customer_name,
                 customer_email=customer_email,
                 customer_phone=customer_phone,
+                customer_address=customer_address,
+                postal_code=postal_code,
                 total_price=total_price,
                 status='pending'
             )
-
             print(f"Order created with ID: {order.id}")
 
             # Создаем элементы заказа и обновляем stock
             for product_id, item in cart.items():
                 product = Product.objects.get(id=product_id)
-
                 print(f"Creating order item: product={product.id}, quantity={item['quantity']}")
-
                 # Создаем элемент заказа
                 OrderItem.objects.create(
                     order=order,
                     merch=product,
                     quantity=item['quantity']
                 )
-
                 # Обновляем количество товара на складе
                 product.stock -= item['quantity']
                 product.save()
-
                 print(f"Updated product stock: {product.id} now has {product.stock} items")
 
             # Очищаем корзину
             request.session['cart'] = {}
             request.session.modified = True
-
             return JsonResponse({
                 'status': 'success',
                 'message': 'Заказ успешно оформлен',
                 'order_id': order.id
             })
 
-
     except Exception as e:
         print(f"Error processing payment: {str(e)}")
         import traceback
         traceback.print_exc()
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
 
 @api_view(['GET'])
 def get_cart_weight(request):
@@ -290,196 +290,139 @@ pochta_api = PochtaAPI(
 @api_view(['POST'])
 def normalize_address(request):
     """
-    Нормализация адреса с использованием API Почты России
+    Нормализация адреса через API Почты России
     """
     try:
+        # Логируем входящий запрос
         logger.debug("=== START normalize_address ===")
-        logger.debug(f"Request method: {request.method}")
         logger.debug(f"Request data: {request.data}")
 
-        # Получаем адрес из тела запроса
-        address = request.data.get('address', '')
-
+        address = request.data.get('address')
         if not address:
-            logger.debug("Address is empty")
             return JsonResponse({
                 'status': 'error',
-                'message': 'Адрес не указан'
+                'message': 'Address is required'
             }, status=400)
 
-        logger.debug(f"Processing address: {address}")
-
-        # Вызываем API для нормализации адреса
+        # Вызываем API Почты России
         result = pochta_api.normalize_address(address)
-        logger.debug(f"API result: {result}")
 
-        if not result:
-            logger.debug("Empty result from API")
+        if isinstance(result, dict) and 'error' in result:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Не удалось нормализовать адрес'
+                'message': result['error']
             }, status=400)
 
-        # Проверяем результат нормализации
-        is_valid, message = pochta_api.validate_address(result)
-        logger.debug(f"Validation result: valid={is_valid}, message={message}")
-
-        if not is_valid:
-            logger.debug("Address validation failed")
-            return JsonResponse({
-                'status': 'error',
-                'message': message
-            }, status=400)
-
-        # Получаем нормализованный адрес
-        normalized_address = result.get('normalized-address', {})
+        # Проверяем качество нормализации
         quality_code = result.get('quality-code', '')
+        quality_description = get_quality_description(quality_code)
 
-        # Форматируем адрес для отображения
-        formatted_address = ', '.join(filter(None, [
-            normalized_address.get('index', ''),
-            normalized_address.get('region', ''),
-            normalized_address.get('area', ''),
-            normalized_address.get('place', ''),
-            normalized_address.get('street', ''),
-            normalized_address.get('house', '')
-        ]))
+        # Формируем ответ
+        normalized_address = {
+            'index': result.get('index', ''),
+            'region': result.get('region', ''),
+            'area': result.get('area', ''),
+            'place': result.get('place', ''),
+            'location': result.get('location', ''),  # Важно включить поле location
+            'street': result.get('street', ''),
+            'house': result.get('house', ''),
+            'building': result.get('building', ''),
+            'corpus': result.get('corpus', ''),
+            'letter': result.get('letter', ''),
+            'office': result.get('office', ''),
+            'vladenie': result.get('vladenie', ''),
+            'room': result.get('room', '')
+        }
 
-        logger.debug(f"Formatted address: {formatted_address}")
-        logger.debug("=== END normalize_address ===")
-
-        # Возвращаем успешный результат
         return JsonResponse({
             'status': 'success',
-            'message': message,
+            'message': 'Address normalized',
+            'is_valid': quality_code in ['GOOD', 'POSTAL_BOX', 'ON_DEMAND', 'UNDEF_05'],
             'normalized_address': normalized_address,
-            'formatted_address': formatted_address,
-            'quality_code': quality_code,
-            'quality_description': message
+            'quality': {
+                'code': quality_code,
+                'description': quality_description
+            }
         })
     except Exception as e:
-        logger.error(f"Error in normalize_address: {str(e)}")
+        logger.error(f"Exception in normalize_address: {str(e)}")
         logger.error(traceback.format_exc())
         return JsonResponse({
             'status': 'error',
-            'message': f'Ошибка при нормализации адреса: {str(e)}'
+            'message': str(e)
         }, status=500)
 
-@api_view(['POST'])
+
+def get_quality_description(quality_code):
+    quality_descriptions = {
+        'GOOD': 'Адрес распознан уверенно',
+        'POSTAL_BOX': 'Почтовый ящик',
+        'ON_DEMAND': 'До востребования',
+        'UNDEF_05': 'Абонентский ящик',
+        'UNDEF_06': 'Войсковая часть',
+        'ACCURATE': 'Адрес распознан с предупреждениями',
+        'OVERREFINED': 'Адрес распознан с уточнением',
+        'CONFIRMED_MANUALLY': 'Адрес подтвержден вручную',
+        'FOREIGN_ADDRESS': 'Иностранный адрес',
+        'NOT_VALIDATED': 'Адрес не удалось распознать'
+    }
+    return quality_descriptions.get(quality_code, 'Неизвестный код качества')
+
+
+@api_view(['GET'])
 def address_suggestions(request):
     """
-    Получение подсказок адресов для автозаполнения
+    Получение подсказок адресов
     """
     try:
-        logger.debug("=== START address_suggestions ===")
-        logger.debug(f"Request method: {request.method}")
-        logger.debug(f"Request data: {request.data}")
-
-        # Получаем запрос из тела запроса
-        query = request.data.get('query', '')
-
-        if not query or len(query) < 3:
-            logger.debug("Query is too short")
+        query = request.GET.get('query', '')
+        if len(query) < 3:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Запрос должен содержать не менее 3 символов',
+                'message': 'Query must be at least 3 characters long',
                 'suggestions': []
             })
 
-        logger.debug(f"Processing query: {query}")
-
-        # Вызываем API для получения вариантов адресов
-        try:
-            # Здесь мы используем API нормализации адреса, но в реальном сценарии
-            # вы можете использовать специальный API для подсказок адресов
-            # Отправляем несколько вариаций запроса для получения разных результатов
-            variations = [
-                query,
-                f"{query}, ул.",
-                f"{query}, пр.",
-                f"{query}, д."
-            ]
-
-            suggestions = []
-
-            for variation in variations:
-                result = pochta_api.normalize_address(variation)
-
-                if result and isinstance(result, list) and len(result) > 0:
-                    # Если API вернуло список результатов
-                    for item in result:
-                        if 'original-address' in item and 'address-normalized' in item:
-                            # Форматируем адрес для отображения
-                            normalized = item['address-normalized']
-                            formatted_address = ', '.join(filter(None, [
-                                normalized.get('index', ''),
-                                normalized.get('region', ''),
-                                normalized.get('area', ''),
-                                normalized.get('place', ''),
-                                normalized.get('street', ''),
-                                normalized.get('house', '')
-                            ]))
-
-                            suggestions.append({
-                                'text': formatted_address,
-                                'value': formatted_address,
-                                'original': normalized
-                            })
-                elif result and isinstance(result, dict) and 'normalized-address' in result:
-                    # Если API вернуло один результат
-                    normalized = result['normalized-address']
-                    formatted_address = ', '.join(filter(None, [
-                        normalized.get('index', ''),
-                        normalized.get('region', ''),
-                        normalized.get('area', ''),
-                        normalized.get('place', ''),
-                        normalized.get('street', ''),
-                        normalized.get('house', '')
-                    ]))
-
-                    suggestions.append({
-                        'text': formatted_address,
-                        'value': formatted_address,
-                        'original': normalized
-                    })
-
-            # Удаляем дубликаты по полю 'value'
-            unique_suggestions = []
-            seen_values = set()
-
-            for suggestion in suggestions:
-                if suggestion['value'] not in seen_values:
-                    seen_values.add(suggestion['value'])
-                    unique_suggestions.append(suggestion)
-
-            # Если не удалось получить подсказки, добавляем исходный запрос
-            if not unique_suggestions:
-                unique_suggestions.append({
-                    'text': query,
-                    'value': query
-                })
-
-            logger.debug(f"Generated {len(unique_suggestions)} unique suggestions")
-
-            return JsonResponse({
-                'status': 'success',
-                'suggestions': unique_suggestions[:5]  # Ограничиваем количество подсказок
-            })
-        except Exception as e:
-            logger.error(f"Error generating suggestions: {str(e)}")
-            logger.error(traceback.format_exc())
-
-            # В случае ошибки возвращаем хотя бы исходный запрос
+        # Вызываем API Почты России
+        result = pochta_api.normalize_address(query)
+        if isinstance(result, dict) and 'error' in result:
             return JsonResponse({
                 'status': 'error',
-                'message': f'Ошибка при получении подсказок: {str(e)}',
-                'suggestions': [{'text': query, 'value': query}]
+                'message': result['error'],
+                'suggestions': []
             })
+
+        # Формируем подсказку на основе нормализованного адреса
+        formatted_address = []
+        if result.get('index'):
+            formatted_address.append(result['index'])
+        if result.get('region'):
+            formatted_address.append(result['region'])
+        if result.get('place') and result.get('place') != result.get('region'):
+            formatted_address.append(result['place'])
+        # Добавляем location (микрорайон)
+        if result.get('location'):
+            formatted_address.append(result['location'])
+        if result.get('street'):
+            formatted_address.append(result['street'])
+        if result.get('house'):
+            formatted_address.append(result['house'])
+
+        suggestion_text = ', '.join(formatted_address)
+
+        suggestions = [{
+            'text': suggestion_text,
+            'value': suggestion_text,
+            'original': result
+        }]
+
+        return JsonResponse({
+            'status': 'success',
+            'suggestions': suggestions
+        })
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        logger.error(traceback.format_exc())
         return JsonResponse({
             'status': 'error',
-            'message': f'Неожиданная ошибка: {str(e)}',
+            'message': str(e),
             'suggestions': []
         })

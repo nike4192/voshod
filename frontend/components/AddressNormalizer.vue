@@ -3,19 +3,17 @@
     <div class="p-field">
       <label for="address">Адрес доставки</label>
       <AutoComplete
-          id="address"
-          v-model="address"
-          class="w-full"
-          placeholder="Введите адрес доставки"
-          :suggestions="suggestions"
-          @complete="searchAddress"
-          @item-select="onAddressSelected"
-          :dropdown="true"
-          :class="{ 'p-invalid': hasError }"
-          optionLabel="text"
-          :loading="loading"
-          :delay="500"
-          :minLength="3"
+        id="address"
+        v-model="address"
+        class="w-full"
+        placeholder="Введите адрес доставки: Город, Улица, Дом"
+        :suggestions="suggestions"
+        @complete="searchAddress"
+        @item-select="onAddressSelected"
+        :dropdown="true"
+        :class="{ 'p-invalid': hasError }"
+        optionLabel="text"
+        :loading="loading"
       />
       <small v-if="hasError" class="p-error">
         Пожалуйста, введите адрес доставки
@@ -40,6 +38,14 @@
 import { ref, defineEmits, defineProps, watch, computed } from 'vue';
 import AutoComplete from 'primevue/autocomplete';
 import axios from 'axios';
+const cartStore = useCart();
+import { useCart } from '~/composables/useCart.js';
+const formattedAddress = computed(() => {
+  if (!normalizationResult.value || !normalizationResult.value.normalized_address) {
+    return '';
+  }
+  return cartStore.formatAddress(normalizationResult.value.normalized_address);
+});
 
 const props = defineProps({
   modelValue: {
@@ -53,7 +59,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue', 'address-normalized']);
-
 const address = ref(props.modelValue || '');
 const normalizing = ref(false);
 const loading = ref(false);
@@ -67,33 +72,90 @@ const hasError = computed(() => props.error);
 watch(address, (newValue) => {
   emit('update:modelValue', newValue);
 });
+async function normalizeAddress() {
+  if (!address.value) return null;
+
+  normalizing.value = true;
+  try {
+    // Используем функцию из хранилища
+    const response = await cartStore.normalizeAddress(address.value);
+
+    if (response.status === 'success') {
+      normalizationResult.value = {
+        status: 'success',
+        message: response.message || 'Адрес успешно нормализован',
+        is_valid: response.is_valid,
+        normalized_address: response.normalized_address || {},
+        quality: response.quality || {
+          code: 'GOOD',
+          description: 'Адрес полностью нормализован'
+        }
+      };
+    } else {
+      normalizationResult.value = {
+        status: 'error',
+        message: response.message || 'Не удалось нормализовать адрес',
+        is_valid: false,
+        normalized_address: {},
+        quality: {
+          code: '',
+          description: ''
+        }
+      };
+    }
+
+    // Уведомляем родительский компонент о результате нормализации
+    emit('address-normalized', normalizationResult.value);
+    return normalizationResult.value;
+  } catch (error) {
+    console.error('Ошибка при нормализации адреса:', error);
+
+    const errorResult = {
+      status: 'error',
+      message: 'Произошла ошибка при нормализации адреса',
+      is_valid: false,
+      normalized_address: {},
+      quality: {
+        code: '',
+        description: ''
+      }
+    };
+
+    normalizationResult.value = errorResult;
+    emit('address-normalized', errorResult);
+    return errorResult;
+  } finally {
+    normalizing.value = false;
+  }
+}
 
 // Функция для поиска адресов (автозаполнение)
 async function searchAddress(event) {
   if (event.query.trim().length > 3) {
     loading.value = true;
     try {
-      // Отправляем запрос для получения вариантов адресов
-      const response = await axios.post('/api/address-suggestions/', {
-        query: event.query
+      // Сначала попробуем нормализовать введенный адрес
+      const response = await axios.post('/api/normalize-address/', {
+        address: event.query
       });
-
       console.log('API Response for suggestions:', response.data);
+      if (response.data.status === 'success' && response.data.normalized_address) {
+        // Если нормализация успешна, используем нормализованный адрес как подсказку
+        const normalizedAddress = response.data.normalized_address;
 
-      // Проверяем успешность ответа и наличие массива подсказок
-      if (response.data.status === 'success' && Array.isArray(response.data.suggestions)) {
-        // Используем подсказки из ответа API
-        suggestions.value = response.data.suggestions;
+        // Используем функцию форматирования из хранилища
+        const formattedAddress = cartStore.formatAddress(normalizedAddress);
+        console.log('Formatted suggestion address:', formattedAddress);
 
-        // Если подсказок нет, добавляем введенный текст как подсказку
-        if (suggestions.value.length === 0) {
-          suggestions.value = [{
-            text: event.query,
-            value: event.query
-          }];
-        }
+        suggestions.value = [
+          {
+            text: formattedAddress,
+            value: formattedAddress,
+            original: normalizedAddress
+          }
+        ];
       } else {
-        // Если API не вернуло подсказки, создаем одну подсказку из введенного текста
+        // Если нормализация не удалась, предлагаем исходный запрос
         suggestions.value = [{
           text: event.query,
           value: event.query
@@ -117,115 +179,63 @@ async function searchAddress(event) {
 function onAddressSelected(event) {
   console.log('Selected item:', event);
 
-  // Проверяем, что у нас есть выбранный элемент
-  if (!event || !event.value) {
-    console.error('No selected item or value');
-    return;
+  // Если у нас есть оригинальный объект с нормализованным адресом
+  if (event.value && event.value.original) {
+    // Сохраняем оригинальный объект
+    const originalAddress = event.value.original;
+
+    // Форматируем адрес заново из оригинального объекта
+    const parts = [];
+
+    if (originalAddress.index) parts.push(originalAddress.index);
+    if (originalAddress.region) parts.push(originalAddress.region);
+
+    // Добавляем город только если он отличается от региона
+    if (originalAddress.place && originalAddress.place !== originalAddress.region) {
+      parts.push(originalAddress.place);
+    }
+
+    // Важно! Добавляем микрорайон
+    if (originalAddress.location) {
+      parts.push(originalAddress.location);
+    }
+
+    if (originalAddress.street) parts.push(originalAddress.street);
+    if (originalAddress.house) parts.push(originalAddress.house);
+
+    // Форматируем полный адрес
+    const formattedAddress = parts.join(', ');
+    console.log('Formatted address from original data:', formattedAddress);
+
+    // Устанавливаем отформатированный адрес
+    address.value = formattedAddress;
+
+    // Сохраняем нормализованный результат
+    normalizationResult.value = {
+      status: 'success',
+      message: 'Адрес нормализован',
+      is_valid: true,
+      normalized_address: originalAddress,
+      quality: {
+        code: 'GOOD',
+        description: 'Адрес полностью нормализован'
+      }
+    };
+
+    // Уведомляем родительский компонент о нормализованном адресе
+    emit('address-normalized', normalizationResult.value);
   }
-
-  // Обновляем значение адреса
-  if (typeof event.value === 'object') {
-    // Если event.value - это объект
-    if (event.value.value) {
-      address.value = event.value.value;
-    } else if (event.value.text) {
-      address.value = event.value.text;
-    }
-
-    // Если у нас есть оригинальный объект с нормализованным адресом, сохраняем его
-    if (event.value.original) {
-      normalizationResult.value = {
-        status: 'success',
-        message: 'Адрес нормализован',
-        is_valid: true,
-        normalized_address: event.value.original,
-        quality: {
-          code: 'GOOD', // Предполагаем, что качество хорошее, так как это результат нормализации
-          description: 'Адрес полностью нормализован'
-        }
-      };
-
-      // Уведомляем родительский компонент о нормализованном адресе
-      emit('address-normalized', normalizationResult.value);
-    }
-  } else if (typeof event.value === 'string') {
-    // Если event.value - это строка
+  // Обработка других случаев
+  else if (event.value && typeof event.value.value === 'string') {
+    address.value = event.value.value;
+  } else if (event.value && typeof event.value === 'string') {
     address.value = event.value;
+  } else if (event.value && event.value.text) {
+    address.value = event.value.text;
   }
 
   // Отправляем обновленное значение в родительский компонент
   emit('update:modelValue', address.value);
-
-  // Очищаем подсказки
-  suggestions.value = [];
-}
-// Функция нормализации адреса (будет вызываться из родительского компонента)
-async function normalizeAddress() {
-  if (!address.value) return null;
-
-  // Если у нас уже есть нормализованный результат, возвращаем его
-  if (normalizationResult.value &&
-      normalizationResult.value.status === 'success' &&
-      normalizationResult.value.normalized_address) {
-    return normalizationResult.value;
-  }
-
-  normalizing.value = true;
-  try {
-    const response = await axios.post('/api/normalize-address/', {
-      address: address.value
-    });
-
-    console.log('Normalized address response:', response.data);
-
-    if (response.data.status === 'success') {
-      normalizationResult.value = {
-        status: 'success',
-        message: response.data.message || 'Адрес успешно нормализован',
-        is_valid: true,
-        normalized_address: response.data.normalized_address || {},
-        quality: {
-          code: response.data.quality_code || 'GOOD',
-          description: response.data.quality_description || 'Адрес полностью нормализован'
-        }
-      };
-    } else {
-      normalizationResult.value = {
-        status: 'error',
-        message: response.data.message || 'Не удалось нормализовать адрес',
-        is_valid: false,
-        normalized_address: {},
-        quality: {
-          code: '',
-          description: ''
-        }
-      };
-    }
-
-    // Уведомляем родительский компонент о результате нормализации
-    emit('address-normalized', normalizationResult.value);
-
-    return normalizationResult.value;
-  } catch (error) {
-    console.error('Ошибка при нормализации адреса:', error);
-    const errorResult = {
-      status: 'error',
-      message: 'Произошла ошибка при нормализации адреса',
-      is_valid: false,
-      normalized_address: {},
-      quality: {
-        code: '',
-        description: ''
-      }
-    };
-
-    normalizationResult.value = errorResult;
-    emit('address-normalized', errorResult);
-
-    return errorResult;
-  } finally {
-    normalizing.value = false;
-  }
 }
 
 // Экспортируем функцию нормализации для использования в родительском компоненте

@@ -18,7 +18,8 @@ class Order(models.Model):
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=50, default='pending')  # Статус заказа
-
+    customer_address = models.TextField(blank=True, null=True, verbose_name="Адрес доставки")
+    postal_code = models.CharField(max_length=20, blank=True, null=True, verbose_name="Почтовый индекс")
     def __str__(self):
         return f"Order #{self.id}"
 

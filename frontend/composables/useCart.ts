@@ -107,20 +107,17 @@ export const useCart = defineStore('cart', () => {
   }
 
   // Обработка оплаты
-  async function processPayment(customerData = {}, normalizedAddress = null) {
+  async function processPayment(customerData) {
   loading.value = true;
   paymentStatus.value = '';
   paymentMessage.value = '';
   insufficientItems.value = [];
 
   try {
-    // Подготовка данных для отправки, включая нормализованный адрес
-    const paymentData = {
-      ...customerData,
-      normalized_address: normalizedAddress
-    };
+    console.log('Отправка данных платежа на сервер:', customerData);
 
-    const response = await axios.post('/api/process_payment/', paymentData);
+    // Отправляем данные в формате, который ожидает сервер
+    const response = await axios.post('/api/process_payment/', customerData);
 
     // Обработка ответа
     paymentStatus.value = response.data.status;
@@ -141,10 +138,22 @@ export const useCart = defineStore('cart', () => {
     return response.data;
   } catch (err) {
     console.error('Ошибка при обработке платежа:', err);
+
+    // Если сервер вернул ответ с ошибкой, выводим его
+    if (err.response && err.response.data) {
+      console.error('Ответ сервера с ошибкой:', err.response.data);
+      paymentMessage.value = err.response.data.message || 'Произошла ошибка при обработке платежа';
+    } else {
+      paymentMessage.value = 'Произошла ошибка при обработке платежа';
+    }
+
     error.value = err;
     paymentStatus.value = 'error';
-    paymentMessage.value = 'Произошла ошибка при обработке платежа';
-    return { status: 'error', message: 'Произошла ошибка при обработке платежа' };
+
+    return {
+      status: 'error',
+      message: paymentMessage.value
+    };
   } finally {
     loading.value = false;
   }
@@ -169,11 +178,60 @@ async function normalizeAddress(address) {
     throw error;
   }
 }
-function saveNormalizedAddress(normalizedAddress) {
-  // Сохраняем нормализованный адрес в хранилище
-  // Это может пригодиться при оформлении заказа
-  const addressData = normalizedAddress?.normalized_address || {};
-  return addressData;
+function saveNormalizedAddress(apiResponse) {
+  // Если ответ от API содержит массив, берем первый элемент
+  const addressData = Array.isArray(apiResponse) ? apiResponse[0] : apiResponse;
+
+  // Возвращаем объект с нужными полями
+  return {
+    index: addressData.index,
+    region: addressData.region,
+    place: addressData.place,
+    location: addressData.location,
+    street: addressData.street,
+    house: addressData.house,
+    building: addressData.building,
+    corpus: addressData.corpus,
+    room: addressData.room
+  };
+}
+
+function formatAddress(normalizedAddress) {
+  if (!normalizedAddress) return '';
+
+  const parts = [];
+
+  // Добавляем индекс
+  if (normalizedAddress.index) parts.push(normalizedAddress.index);
+
+  // Добавляем регион
+  if (normalizedAddress.region) parts.push(normalizedAddress.region);
+
+  // Добавляем город только если он отличается от региона
+  if (normalizedAddress.place && normalizedAddress.place !== normalizedAddress.region) {
+    parts.push(normalizedAddress.place);
+  }
+
+  // Добавляем микрорайон/район
+  if (normalizedAddress.location) parts.push(normalizedAddress.location);
+
+  // Добавляем улицу только если она есть
+  if (normalizedAddress.street) parts.push(normalizedAddress.street);
+
+  // Добавляем дом и остальные части адреса
+  if (normalizedAddress.house) parts.push(normalizedAddress.house);
+
+  // Добавляем корпус
+  if (normalizedAddress.building) parts.push(`корп. ${normalizedAddress.building}`);
+
+  // Добавляем строение
+  if (normalizedAddress.corpus) parts.push(`стр. ${normalizedAddress.corpus}`);
+
+  // Добавляем квартиру/офис
+  if (normalizedAddress.room) parts.push(`кв. ${normalizedAddress.room}`);
+
+  // Соединяем все части запятыми
+  return parts.join(', ');
 }
 
   return {
@@ -193,6 +251,7 @@ function saveNormalizedAddress(normalizedAddress) {
     removeFromCart,
     normalizeAddress,
     processPayment,
-    saveNormalizedAddress
+    saveNormalizedAddress,
+    formatAddress
   };
 });
