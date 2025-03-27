@@ -1,5 +1,3 @@
-from django.conf import settings
-from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import csrf_exempt
@@ -426,3 +424,187 @@ def address_suggestions(request):
             'message': str(e),
             'suggestions': []
         })
+
+from .cdek_api import CDEKApi
+
+
+@api_view(['POST'])
+def calculate_cdek_shipping(request):
+    """
+    Расчет стоимости доставки через API CDEK
+    """
+    try:
+        logger.debug("=== START calculate_cdek_shipping ===")
+        logger.debug(f"Request data: {request.data}")
+
+        # Получаем данные из запроса
+        index_to = request.data.get('index_to')
+
+        # Проверяем обязательные параметры
+        if not index_to:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Recipient index is required'
+            }, status=400)
+
+        # Получаем вес корзины
+        # Вместо вызова get_cart_weight напрямую, получаем вес другим способом
+        # Вариант 1: Получаем вес из запроса, если он передан
+        weight = request.data.get('mass')
+
+        # Вариант 2: Если вес не передан, делаем отдельный запрос к API для получения веса
+        if not weight:
+            # Создаем новый HttpRequest для вызова get_cart_weight
+            from django.http import HttpRequest
+            from django.contrib.sessions.middleware import SessionMiddleware
+
+            # Создаем новый HttpRequest
+            http_request = HttpRequest()
+
+            # Копируем сессию из оригинального запроса
+            http_request.session = request.session
+
+            # Получаем ответ от функции get_cart_weight
+            weight_response = get_cart_weight(http_request)
+
+            # Парсим JSON-ответ для получения веса
+            import json
+            weight_data = json.loads(weight_response.content)
+
+            if weight_data.get('status') == 'success':
+                weight = weight_data.get('total_weight', 0)
+            else:
+                weight = 0
+
+        # Если вес равен 0, устанавливаем минимальное значение
+        if not weight or weight == 0:
+            weight = 0.1
+
+        # Преобразуем вес из кг в граммы для API CDEK
+        weight_grams = int(float(weight) * 1000)
+
+        logger.debug(f"Weight: {weight} kg, {weight_grams} g")
+
+        # Инициализируем API CDEK
+        cdek_api = CDEKApi(
+            client_id=settings.CDEK_CLIENT_ID,
+            client_secret=settings.CDEK_CLIENT_SECRET,
+            base_url=settings.CDEK_API_URL
+        )
+
+        # Вызываем API CDEK
+        result = cdek_api.calculate_shipping(
+            postal_code=index_to,
+            weight=weight_grams
+        )
+
+        logger.debug(f"CDEK API result: {result}")
+
+        if 'error' in result:
+            return JsonResponse({
+                'status': 'error',
+                'message': result['error']
+            }, status=400)
+
+        # Получаем стоимость доставки
+        shipping_cost = result.get('shipping_cost')
+
+        # Формируем ответ
+        response_data = {
+            'status': 'success',
+            'shipping_cost': shipping_cost
+        }
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error calculating CDEK shipping: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@api_view(['POST'])
+def calculate_shipping_cost(request):
+    """
+    Расчет стоимости доставки через API Почты России
+    """
+    try:
+        logger.debug("=== START calculate_shipping_cost ===")
+        logger.debug(f"Request data: {request.data}")
+
+        # Получаем данные из запроса
+        index_to = request.data.get('index_to')
+        mass = request.data.get('mass')
+
+        # Проверяем обязательные параметры
+        if not index_to:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Recipient index is required'
+            }, status=400)
+
+        if not mass:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Package mass is required'
+            }, status=400)
+
+        # Опциональные параметры
+        height = request.data.get('height', 2)
+        length = request.data.get('length', 5)
+        width = request.data.get('width', 197)
+        mail_category = request.data.get('mail_category', 'ORDINARY')
+        mail_type = request.data.get('mail_type', 'POSTAL_PARCEL')
+        fragile = request.data.get('fragile', True)
+
+        # Вызываем API Почты России
+        result = pochta_api.calculate_shipping(
+            index_to=index_to,
+            mass=mass,
+            height=height,
+            length=length,
+            width=width,
+            mail_category=mail_category,
+            mail_type=mail_type,
+            fragile=fragile
+        )
+
+        logger.debug(f"API result: {result}")
+
+        if isinstance(result, dict) and 'error' in result:
+            return JsonResponse({
+                'status': 'error',
+                'message': result['error']
+            }, status=400)
+
+        # Проверяем, есть ли в ответе поле cost_in_rubles, которое мы добавили в pochta_api.py
+        shipping_cost = result.get('cost_in_rubles', 300)
+
+        # Также извлекаем информацию о сроках доставки, если она есть
+        delivery_time = None
+        if 'delivery-time' in result:
+            delivery_time = {
+                'min_days': result['delivery-time'].get('min-days', 0),
+                'max_days': result['delivery-time'].get('max-days', 0)
+            }
+
+        # Формируем ответ
+        response_data = {
+            'status': 'success',
+            'shipping_cost': shipping_cost
+        }
+
+        # Добавляем информацию о сроках доставки, если она есть
+        if delivery_time:
+            response_data['delivery_time'] = delivery_time
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error in calculate_shipping_cost: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Internal server error: {str(e)}'
+        }, status=500)

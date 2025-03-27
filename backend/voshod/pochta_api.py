@@ -88,6 +88,98 @@ class PochtaAPI:
             logger.error(traceback.format_exc())
             return {"error": f"Unexpected error: {str(e)}"}
 
+    def calculate_shipping(self, index_to, mass, height=2, length=5, width=197, mail_category="ORDINARY",
+                           mail_type="POSTAL_PARCEL", fragile=True):
+        """
+        Расчет стоимости доставки через API Почты России
+
+        Параметры:
+        - index_to: индекс получателя (получается при нормализации адреса)
+        - mass: вес отправления в граммах
+        - height: высота (см)
+        - length: длина (см)
+        - width: ширина (см)
+        - mail_category: категория отправления (по умолчанию "ORDINARY")
+        - mail_type: тип отправления (по умолчанию "POSTAL_PARCEL")
+        - fragile: хрупкое отправление (по умолчанию True)
+
+        Возвращает:
+        - результат расчета стоимости доставки или словарь с ошибкой
+        """
+        try:
+            logger.debug(f"Calculating shipping cost to index: {index_to}, mass: {mass}g")
+
+            url = f"{self.base_url}/1.0/tariff"
+
+            payload = {
+                "index-to": index_to,
+                "mail-category": mail_category,
+                "mail-type": mail_type,
+                "mass": mass,
+                "dimension": {
+                    "height": height,
+                    "length": length,
+                    "width": width
+                },
+                "fragile": str(fragile).lower()
+            }
+
+            logger.debug(f"Request payload: {payload}")
+
+            # Отправляем запрос
+            response = requests.post(
+                url,
+                headers=self.headers,
+                json=payload,
+                timeout=60
+            )
+
+            # Логируем ответ
+            logger.debug(f"Response status code: {response.status_code}")
+
+            # Проверяем статус ответа
+            if response.status_code != 200:
+                logger.error(f"Error response: {response.text}")
+                return {"error": f"API returned status {response.status_code}: {response.text}"}
+
+            # Парсим и возвращаем результат
+            result = response.json()
+            logger.debug(f"Shipping calculation result: {result}")
+
+            # Извлекаем стоимость доставки из ответа
+            # Судя по примеру ответа, стоимость доставки находится в поле total-rate
+            if "total-rate" in result:
+                # total-rate в копейках, переводим в рубли
+                cost_in_rubles = result["total-rate"] / 100
+                logger.debug(
+                    f"Extracted shipping cost from total-rate: {result['total-rate']} kopecks = {cost_in_rubles} rubles")
+                result["cost_in_rubles"] = cost_in_rubles
+            else:
+                # Если поле total-rate отсутствует, проверяем другие возможные поля
+                if "ground-rate" in result and "rate" in result["ground-rate"]:
+                    # ground-rate.rate в копейках, переводим в рубли
+                    cost_in_rubles = result["ground-rate"]["rate"] / 100
+                    logger.debug(
+                        f"Extracted shipping cost from ground-rate.rate: {result['ground-rate']['rate']} kopecks = {cost_in_rubles} rubles")
+                    result["cost_in_rubles"] = cost_in_rubles
+                elif "fragile-rate" in result and "rate" in result["fragile-rate"]:
+                    # fragile-rate.rate в копейках, переводим в рубли
+                    cost_in_rubles = result["fragile-rate"]["rate"] / 100
+                    logger.debug(
+                        f"Extracted shipping cost from fragile-rate.rate: {result['fragile-rate']['rate']} kopecks = {cost_in_rubles} rubles")
+                    result["cost_in_rubles"] = cost_in_rubles
+                else:
+                    # Если не нашли ни одного из известных полей, устанавливаем стоимость по умолчанию
+                    logger.warning("Could not find shipping cost in API response, using default value")
+                    result["cost_in_rubles"] = 300
+
+            return result
+
+        except Exception as e:
+            error_message = f"Error calculating shipping cost: {str(e)}"
+            logger.error(error_message)
+            logger.error(traceback.format_exc())
+            return {"error": error_message}
 
 class AddressValidator:
     def _is_valid_quality(self, quality_code):

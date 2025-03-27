@@ -3,6 +3,7 @@
     <h1>{{ currentStep === 'cart' ? 'Товары в корзине' : 'Оформление заказа' }}</h1>
     <Button @click="home" style="width:50px; height:50px;" icon="pi pi-home"></Button>
   </div>
+    <div class="cart-page-wrapper">
   <div style="max-width:1400px;" class="m-auto">
     <!-- Индикатор шагов -->
     <div class="steps-container mb-4">
@@ -65,6 +66,7 @@
             <div class="cart-items lg:w-8 pr-0 lg:pr-3">
               <div v-for="item in cartStore.cartProducts" :key="item.id"
                    class="flex flex-row flex-wrap cart-item border-round-lg w-full align-items-center mb-3">
+
                 <div class="cart-item-image mr-3">
                   <img
                       v-if="item.image_url"
@@ -74,6 +76,7 @@
                   />
                   <div v-else class="image-placeholder">Нет изображения</div>
                 </div>
+
                 <div class="cart-item-details flex-grow-1">
                   <h3 class="m-0 mb-2">{{ item.name }}</h3>
                   <p class="m-0 mb-1">Цена: {{ item.price }} ₽</p>
@@ -114,6 +117,39 @@
           <div class="p-fluid">
             <form @submit.prevent="goToConfirmation">
               <div class="p-grid">
+                <div class="delivery-method-selection mb-4">
+                  <h3>Выберите способ доставки</h3>
+
+                  <div class="delivery-options">
+                    <div class="delivery-option">
+                      <RadioButton
+                          v-model="customerData.delivery_method"
+                          inputId="pochta"
+                          name="delivery_method"
+                          value="pochta_russia"
+                          @change="handleDeliveryMethodChange"
+                      />
+                      <label for="pochta" class="delivery-label">
+                        <img src="@/assets/Pochta_Russia.png" alt="Почта России" class="delivery-logo"/>
+                        <span>Почта России</span>
+                      </label>
+                    </div>
+
+                    <div class="delivery-option">
+                      <RadioButton
+                          v-model="customerData.delivery_method"
+                          inputId="cdek"
+                          name="delivery_method"
+                          value="cdek"
+                          @change="handleDeliveryMethodChange"
+                      />
+                      <label for="cdek" class="delivery-label">
+                        <img src="@/assets/CDEK.png" alt="СДЭК" class="delivery-logo"/>
+                        <span>СДЭК</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
                 <div class="p-col-12 p-md-6">
                   <div class="p-field">
                     <label for="customer_name">Ваше имя</label>
@@ -163,6 +199,7 @@
                       :error="v$.delivery_address.$invalid && v$.delivery_address.$dirty"
                       ref="addressNormalizerRef"
                       @blur="validateAddress"
+                      @address-normalized="handleAddressNormalized"
                   />
                   <small v-if="v$.delivery_address.$invalid && v$.delivery_address.$dirty" class="p-error">
                     {{ v$.delivery_address.$errors[0].$message }}
@@ -174,7 +211,7 @@
                     <Textarea
                         id="delivery_comment"
                         v-model="customerData.delivery_comment"
-                        class="w-full"
+                         class="w-full"
                         rows="3"
                     />
                   </div>
@@ -192,44 +229,91 @@
           </div>
         </div>
       </div>
+      <div v-if="currentStep === 'cart'" class="cart-summary mt-3">
     </div>
   </div>
-  <div v-if="currentStep === 'cart'" class="cart-summary mt-3">
-    <div class="flex justify-content-between">
-      <span class="font-bold">Общий вес:</span>
-      <span>{{ cartStore.totalWeight.toFixed(2) }} кг</span>
-    </div>
   </div>
   <!-- Шаг 3: Подтверждение -->
-  <div v-if="currentStep === 'confirmation'" class="confirmation-step">
-    <h2>Подтверждение заказа</h2>
-    <!-- Информация о заказе -->
-    <div class="order-summary">
-      <h3>Данные заказа</h3>
-      <div class="customer-info">
+  <div v-if="currentStep === 'confirmation'">
+      <h2>Подтверждение заказа</h2>
+
+      <!-- Сводка заказа -->
+      <div class="order-summary p-4 mb-4 summary-box">
+        <h3>Ваш заказ</h3>
+
+        <!-- Список товаров -->
+<div v-for="product in cartStore.cartProducts" :key="product.id" class="mb-2 d-flex justify-content-between">
+  <span>{{ product.name || 'Товар' }} x {{ product.quantity || 1 }}</span>&nbsp;
+  <span>
+    {{ calculateProductTotal(product) }} ₽
+  </span>
+</div>
+
+        <hr />
+
+        <div class="d-flex justify-content-between mb-2 align-items-center">
+          <span>Стоимость доставки:</span>
+          <div class="d-flex align-items-center">
+            <span class="mr-2">{{ cartStore.shippingCost.toFixed(2) }} ₽</span>
+            <ProgressSpinner v-if="cartStore.shippingLoading" style="width:20px;height:20px" class="ml-2"/>
+          </div>
+        </div>
+
+        <!-- Сообщение об ошибке и кнопка пересчета -->
+        <div v-if="cartStore.shippingError" class="shipping-error-container mb-3">
+          <div class="shipping-error-message">
+            <i class="pi pi-exclamation-triangle mr-2" style="color: #dc3545;"></i>
+            <span>{{ cartStore.shippingError }}</span>
+          </div>
+          <Button
+              label="Пересчитать"
+              @click="recalculateShipping"
+              class="p-button-sm p-button-outlined p-button-danger"
+              :loading="cartStore.shippingLoading"
+              :disabled="cartStore.shippingLoading"
+          />
+        </div>
+
+        <hr />
+
+        <!-- Итоговая сумма с доставкой -->
+        <div class="d-flex justify-content-between font-weight-bold">
+          <span>Итого к оплате:</span>
+          <span>{{ cartStore.totalWithShipping.toFixed(2) }} ₽</span>
+        </div>
+      </div>
+
+      <!-- Данные покупателя -->
+      <div class="customer-info p-4 mb-4 summary-box">
+        <h3>Данные получателя</h3>
         <p><strong>Имя:</strong> {{ customerData.customer_name }}</p>
         <p><strong>Email:</strong> {{ customerData.customer_email }}</p>
         <p><strong>Телефон:</strong> {{ customerData.customer_phone }}</p>
         <p><strong>Адрес доставки:</strong> {{ customerData.delivery_address }}</p>
+        <p><strong>Способ доставки:</strong>
+          <span v-if="customerData.delivery_method === 'pochta_russia'">Почта России</span>
+          <span v-else-if="customerData.delivery_method === 'cdek'">СДЭК</span>
+        </p>
+        <p v-if="customerData.delivery_comment"><strong>Комментарий:</strong> {{ customerData.delivery_comment }}</p>
       </div>
-      <h3>Товары в корзине</h3>
-      <div v-for="cartItem in cartStore.cartProducts" :key="cartItem.id" class="cart-item">
-        <p>{{ cartItem.name }} - {{ cartItem.quantity }} шт. x {{ cartItem.price }} руб.</p>
-      </div>
-      <div class="order-total">
-        <p><strong>Итого:</strong> {{ cartStore.totalPrice }} руб.</p>
+
+      <!-- Кнопки управления -->
+      <div class="d-flex justify-content-between mt-4">
+        <Button label="Назад" @click="goToDelivery" class="p-button-secondary" />
+        <Button
+          label="Оплатить"
+          @click="processPayment"
+          :loading="cartStore.loading"
+          :disabled="cartStore.loading || cartStore.shippingLoading || cartStore.shippingError"
+          class="p-button-success"
+        />
       </div>
     </div>
-    <!-- Кнопки навигации -->
-    <div class="navigation-buttons">
-      <Button label="Назад к доставке" class="p-button-secondary" @click="currentStep = 'delivery'" />
-      <Button label="Подтвердить заказ" class="p-button-success" @click="confirmOrder" />
-    </div>
-  </div>
+</div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useCart } from '~/composables/useCart.js';
 import { useVuelidate } from '@vuelidate/core';
 import { required, email, helpers } from '@vuelidate/validators';
@@ -254,7 +338,8 @@ const customerData = ref({
   customer_email: '',
   customer_phone: '',
   delivery_address: '',
-  delivery_comment: ''
+  delivery_comment: '',
+  delivery_method: 'pochta_russia'
 });
 
 // Правила валидации
@@ -267,6 +352,22 @@ const rules = {
   customer_phone: { required: helpers.withMessage('Пожалуйста, введите ваш телефон', required) },
   delivery_address: { required: helpers.withMessage('Пожалуйста, введите адрес доставки', required) }
 };
+
+function handleDeliveryMethodChange() {
+  console.log('Изменен способ доставки на:', customerData.value.delivery_method);
+
+  // Устанавливаем выбранный способ доставки в хранилище
+  cartStore.setDeliveryMethod(customerData.value.delivery_method);
+
+  // Сбрасываем стоимость доставки
+  cartStore.shippingCost = 0;
+  cartStore.shippingError = null;
+
+  // Если у нас уже есть индекс и вес, пересчитываем стоимость доставки
+  if (cartStore.deliveryIndex && cartStore.totalWeight > 0) {
+    cartStore.calculateShipping();
+  }
+}
 
 // Инициализация Vuelidate
 const v$ = useVuelidate(rules, customerData);
@@ -288,6 +389,16 @@ const goToCart = () => {
     currentStep.value = 'cart';
   }
 };
+
+function calculateProductTotal(product) {
+  if (product.total !== undefined && typeof product.total === 'number') {
+    return product.total.toFixed(2);
+  } else if (product.price !== undefined && product.quantity !== undefined) {
+    return (product.price * product.quantity).toFixed(2);
+  } else {
+    return '0.00'; // Возвращаем строку по умолчанию, если данные некорректны
+  }
+}
 
 // Функция для перехода к шагу "Доставка"
 const goToDelivery = () => {
@@ -324,36 +435,78 @@ const validateAddress = async () => {
 };
 
 // Функция для перехода к шагу "Подтверждение"
-const goToConfirmation = async () => {
-  console.log('Вызвана функция goToConfirmation');
-
+// Переход к подтверждению заказа
+async function goToConfirmation() {
   try {
     // Запускаем валидацию
     const isValid = await v$.value.$validate();
-    console.log('v$.value.$valid:', isValid);
 
-    if (isValid) {
-      console.log('Форма валидна, переходим к подтверждению');
-      currentStep.value = 'confirmation';
-    } else {
-      console.log('Форма не валидна, показываем ошибки');
+    if (!isValid) {
       toast.add({
         severity: 'error',
         summary: 'Ошибка',
         detail: 'Пожалуйста, заполните все обязательные поля корректно',
         life: 3000
       });
+      return;
     }
+
+    // Убедимся, что у нас есть вес корзины
+    await ensureCartWeight();
+
+    // Устанавливаем выбранный способ доставки в хранилище
+    cartStore.setDeliveryMethod(customerData.value.delivery_method);
+
+
+    // Если индекс доставки есть, но стоимость доставки еще не рассчитана, рассчитываем
+    if (cartStore.deliveryIndex && cartStore.shippingCost === 0 && !cartStore.shippingLoading) {
+      try {
+        await cartStore.calculateShipping();
+      } catch (error) {
+        console.error('Ошибка при расчете доставки:', error);
+        // Устанавливаем стоимость по умолчанию
+        cartStore.shippingCost = 300;
+        cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
+      }
+    }
+
+    // Если индекса нет, но адрес есть, пытаемся извлечь индекс из адреса
+    if (!cartStore.deliveryIndex && customerData.value.delivery_address) {
+      const addressStr = customerData.value.delivery_address;
+      const match = addressStr.match(/\b(\d{6})\b/);
+      if (match) {
+        cartStore.saveDeliveryIndex(match[1]);
+        try {
+          await cartStore.calculateShipping();
+        } catch (error) {
+          console.error('Ошибка при расчете доставки:', error);
+          // Устанавливаем стоимость по умолчанию
+          cartStore.shippingCost = 300;
+          cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
+        }
+      } else {
+        // Если индекс не найден, устанавливаем стоимость по умолчанию
+        cartStore.shippingCost = 300;
+        cartStore.shippingError = 'Не удалось определить индекс для расчета доставки. Используется стоимость по умолчанию.';
+      }
+    }
+
+    // Переходим к шагу подтверждения
+    currentStep.value = 'confirmation';
+
   } catch (error) {
-    console.error('Ошибка при валидации формы:', error);
+    console.error('Ошибка при переходе к подтверждению:', error);
     toast.add({
       severity: 'error',
       summary: 'Ошибка',
-      detail: 'Произошла ошибка при валидации формы',
+      detail: 'Произошла ошибка при обработке данных',
       life: 3000
     });
   }
-};
+}
+
+// Возврат к шагу доставки
+
 
 // Вычисляемое свойство для форматированного адреса доставки
 const formattedDeliveryAddress = computed(() => {
@@ -386,7 +539,17 @@ const removeItem = async (productId) => {
 };
 
 // Функция для подтверждения заказа
-const confirmOrder = async () => {
+async function processPayment() {
+  if (cartStore.shippingLoading) {
+    toast.add({
+      severity: 'info',
+      summary: 'Подождите',
+      detail: 'Идет расчет стоимости доставки',
+      life: 3000
+    });
+    return;
+  }
+
   try {
     // Подготавливаем данные для отправки
     const orderData = {
@@ -394,7 +557,9 @@ const confirmOrder = async () => {
       customer_email: customerData.value.customer_email,
       customer_phone: customerData.value.customer_phone,
       delivery_address: customerData.value.delivery_address,
-      delivery_comment: customerData.value.delivery_comment || ''
+      delivery_comment: customerData.value.delivery_comment || '',
+      shipping_cost: cartStore.shippingCost,
+      delivery_index: cartStore.deliveryIndex
     };
 
     console.log('Отправляемые данные заказа:', orderData);
@@ -411,27 +576,17 @@ const confirmOrder = async () => {
         life: 3000
       });
 
-      // Очищаем форму
-      customerData.value = {
-        customer_name: '',
-        customer_email: '',
-        customer_phone: '',
-        delivery_address: '',
-        delivery_comment: ''
-      };
-
-      // Переход на главную страницу
+      // Переходим на главную страницу или страницу успешного оформления заказа
       setTimeout(() => {
         router.push('/');
       }, 2000);
-    } else {
-      // Обработка ошибки
-      const errorMessage = result && result.message ? result.message : 'Произошла ошибка при оформлении заказа';
+    } else if (result && result.status === 'error') {
+      // Показываем сообщение об ошибке
       toast.add({
         severity: 'error',
         summary: 'Ошибка',
-        detail: errorMessage,
-        life: 3000
+        detail: result.message || 'Произошла ошибка при оформлении заказа',
+        life: 5000
       });
     }
   } catch (error) {
@@ -440,10 +595,195 @@ const confirmOrder = async () => {
       severity: 'error',
       summary: 'Ошибка',
       detail: 'Произошла ошибка при оформлении заказа',
+      life: 5000
+    });
+  }
+}
+
+// Обработчик нормализации адреса
+async function handleAddressNormalized(normalizedAddress) {
+  console.log('Получен нормализованный адрес:', normalizedAddress);
+
+  // Сохраняем нормализованный адрес в форме
+  if (typeof normalizedAddress === 'string') {
+    customerData.value.delivery_address = normalizedAddress;
+    console.log('Сохранен строковый адрес:', normalizedAddress);
+  } else if (normalizedAddress && normalizedAddress.address) {
+    customerData.value.delivery_address = normalizedAddress.address;
+    console.log('Сохранен адрес из поля address:', normalizedAddress.address);
+  } else if (normalizedAddress) {
+    // Используем существующую функцию форматирования
+    customerData.value.delivery_address = cartStore.formatAddress(normalizedAddress);
+    console.log('Сохранен отформатированный адрес:', customerData.value.delivery_address);
+  }
+
+  // Извлекаем индекс из нормализованного адреса
+  let index = null;
+
+  // Проверяем все возможные места, где может быть индекс
+  if (normalizedAddress) {
+    console.log('Структура нормализованного адреса:', JSON.stringify(normalizedAddress, null, 2));
+
+    // Проверяем прямое поле index
+    if (normalizedAddress.index) {
+      index = normalizedAddress.index;
+      console.log('Индекс найден в поле index:', index);
+    }
+    // Проверяем вложенные объекты
+    else if (normalizedAddress.normalized_address && normalizedAddress.normalized_address.index) {
+      index = normalizedAddress.normalized_address.index;
+      console.log('Индекс найден во вложенном объекте normalized_address.index:', index);
+    }
+    // Другие проверки...
+  }
+
+  console.log('Итоговый извлеченный индекс:', index);
+
+  if (!index) {
+    console.warn('Не удалось извлечь индекс из нормализованного адреса');
+
+    // Предлагаем пользователю ввести индекс вручную
+    toast.add({
+      severity: 'warn',
+      summary: 'Внимание',
+      detail: 'Не удалось определить почтовый индекс. Пожалуйста, введите его вручную для расчета стоимости доставки.',
+      life: 5000
+    });
+
+    const userIndex = prompt('Пожалуйста, введите почтовый индекс для расчета стоимости доставки:', '');
+    if (userIndex && /^\d{6}$/.test(userIndex.trim())) {
+      index = userIndex.trim();
+      console.log('Пользователь ввел индекс:', index);
+    } else {
+      console.warn('Пользователь не ввел корректный индекс');
+      // Устанавливаем стоимость доставки по умолчанию
+      cartStore.shippingCost = 300;
+      cartStore.shippingError = 'Не удалось определить индекс для расчета доставки. Используется стоимость по умолчанию.';
+      return;
+    }
+  }
+
+  // Сохраняем индекс в хранилище
+  cartStore.saveDeliveryIndex(index);
+
+  // Убедимся, что у нас есть вес корзины
+  await cartStore.fetchCartWeight();
+
+  // Запускаем расчет доставки
+  await cartStore.calculateShipping();
+}
+
+// Функция для пересчета стоимости доставки
+async function recalculateShipping() {
+  try {
+    // Очищаем предыдущую ошибку
+    cartStore.shippingError = null;
+
+    // Проверяем наличие индекса
+    if (!cartStore.deliveryIndex) {
+      // Пытаемся извлечь индекс из адреса
+      const addressStr = customerData.value.delivery_address;
+      const match = addressStr.match(/\b(\d{6})\b/);
+      if (match) {
+        cartStore.saveDeliveryIndex(match[1]);
+      } else {
+        // Если индекс не найден, предлагаем пользователю ввести его вручную
+        const indexInput = prompt('Пожалуйста, введите почтовый индекс для расчета доставки:', '');
+        if (indexInput && /^\d{6}$/.test(indexInput.trim())) {
+          cartStore.saveDeliveryIndex(indexInput.trim());
+        } else {
+          toast.add({
+            severity: 'error',
+            summary: 'Ошибка',
+            detail: 'Пожалуйста, введите корректный 6-значный почтовый индекс',
+            life: 3000
+          });
+          return;
+        }
+      }
+    }
+
+    // Убедимся, что у нас есть вес корзины
+    await cartStore.fetchCartWeight();
+
+    // Запускаем расчет доставки
+    await cartStore.calculateShipping();
+
+    // Если после расчета все еще есть ошибка, показываем уведомление
+    if (cartStore.shippingError) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Предупреждение',
+        detail: 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.',
+        life: 5000
+      });
+    } else {
+      toast.add({
+        severity: 'success',
+        summary: 'Успех',
+        detail: 'Стоимость доставки успешно рассчитана',
+        life: 3000
+      });
+    }
+  } catch (error) {
+    console.error('Ошибка при пересчете стоимости доставки:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: 'Произошла ошибка при пересчете стоимости доставки',
+      life: 3000
+    });
+
+    // Устанавливаем стоимость по умолчанию при ошибке
+    cartStore.shippingCost = 300;
+    cartStore.shippingError = 'Произошла ошибка при расчете стоимости доставки. Используется стоимость по умолчанию.';
+  }
+}
+
+// Функция для проверки и обновления веса корзины
+async function ensureCartWeight() {
+  console.log('Проверка веса корзины...');
+
+  // Если вес равен 0 или не определен, запрашиваем его
+  if (!cartStore.totalWeight || cartStore.totalWeight <= 0) {
+    console.log('Вес корзины не определен или равен 0, запрашиваем...');
+    await cartStore.fetchCartWeight();
+
+    // Проверяем результат
+    if (!cartStore.totalWeight || cartStore.totalWeight <= 0) {
+      console.warn('Вес корзины все еще равен 0, устанавливаем минимальное значение');
+      // Если вес все еще 0, но товары есть, устанавливаем минимальный вес
+      if (cartStore.cartProducts.length > 0) {
+        cartStore.totalWeight = 100; // Минимальный вес 100 грамм
+      }
+    }
+  }
+
+  console.log('Текущий вес корзины:', cartStore.totalWeight);
+  return cartStore.totalWeight;
+}
+
+const hasItems = computed(() => {
+  return cartStore.cartProducts.length > 0;
+});
+
+// Вычисляемое свойство для проверки возможности перехода к оформлению
+const canProceedToCheckout = computed(() => {
+  return hasItems.value && !cartStore.loading;
+});
+
+watch(() => cartStore.cartProducts, (newValue) => {
+  if (newValue.length === 0 && currentStep.value !== 'cart') {
+    // Если корзина опустела, возвращаемся к шагу корзины
+    currentStep.value = 'cart';
+    toast.add({
+      severity: 'info',
+      summary: 'Информация',
+      detail: 'Корзина пуста',
       life: 3000
     });
   }
-};
+}, { deep: true });
 
 // Загрузка данных при монтировании компонента
 onMounted(async () => {
@@ -468,11 +808,18 @@ onMounted(async () => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.m-auto {
+  width: 100%;
+  overflow: hidden; /* Предотвращает выход содержимого за границы */
+}
+
 .product-image {
   width: 80px;
   height: 80px;
   object-fit: cover;
   border-radius: 4px;
+  position: relative;     /* Добавить относительное позиционирование */
+  z-index: 1;             /* Убедиться, что изображение находится поверх других элементов */
 }
 
 .image-placeholder {
@@ -608,4 +955,256 @@ onMounted(async () => {
   opacity: 0.6;
 }
 
+.cart-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.checkout-steps {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.summary-box {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.empty-cart {
+  text-align: center;
+  padding: 50px 0;
+}
+
+.empty-cart-icon {
+  font-size: 3rem;
+  color: #ccc;
+  margin-bottom: 20px;
+}
+
+.cart-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.cart-item-image {
+  width: 80px;
+  height: 80px;
+  margin-right: 15px;
+  border-radius: 4px;
+  display: flex;          /* Изменить на flex */
+  justify-content: center; /* Центрирование по горизонтали */
+  align-items: center;     /* Центрирование по вертикали */
+  overflow: hidden;        /* Обрезать выходящее за границы содержимое */
+  position: relative;      /* Для абсолютного позиционирования внутренних элементов */
+}
+
+.cart-item-details {
+  flex: 1;
+}
+
+.cart-item-actions {
+  display: flex;
+  align-items: center;
+}
+
+.quantity-control {
+  display: flex;
+  align-items: center;
+  margin-right: 15px;
+}
+
+.quantity-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f0f0f0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.quantity-input {
+  width: 40px;
+  text-align: center;
+  margin: 0 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px;
+}
+
+.cart-summary {
+  background-color: #f9f9f9;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.error-message {
+  color: #f44336;
+  font-size: 0.8rem;
+  margin-top: 5px;
+}
+
+[v-if="currentStep === 'confirmation'"] {
+  color: #000 !important;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Стили для блоков с белым фоном */
+.order-summary,
+.customer-info,
+.summary-box {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+  color: #000 !important; /* Принудительно устанавливаем черный цвет текста */
+}
+
+/* Стили для заголовков */
+.order-summary h2,
+.order-summary h3,
+.customer-info h2,
+.customer-info h3 {
+  color: #000 !important;
+  margin-bottom: 15px;
+}
+
+/* Стили для текста внутри блоков */
+.order-summary p,
+.order-summary div,
+.order-summary span,
+.customer-info p,
+.customer-info div,
+.customer-info span {
+  color: #000 !important;
+}
+
+/* Стили для разделителей */
+.order-summary hr,
+.customer-info hr {
+  border-color: #ddd;
+  margin: 15px 0;
+}
+
+/* Стили для общей суммы */
+.font-weight-bold {
+  font-weight: bold;
+  color: #000 !important;
+}
+
+/* Стили для сообщений об ошибках (сохраняем красный цвет) */
+.text-danger {
+  color: #dc3545 !important;
+}
+
+/* Общие стили для шага подтверждения */
+[v-if="currentStep === 'confirmation'"] h2 {
+  color: #000 !important;
+  margin-bottom: 20px;
+}
+
+/* Стили для информации о товарах */
+[v-if="currentStep === 'confirmation'"] .d-flex {
+  color: #000 !important;
+}
+
+/* Стили для кнопок на шаге подтверждения */
+[v-if="currentStep === 'confirmation'"] .navigation-buttons {
+  margin-top: 20px;
+}
+.shipping-error-container {
+  background-color: rgba(220, 53, 69, 0.1);
+  border-left: 3px solid #dc3545;
+  padding: 10px 15px;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #000 !important;
+}
+
+.shipping-error-message {
+  display: flex;
+  align-items: center;
+  color: #000 !important;
+}
+
+.shipping-error-message i {
+  margin-right: 8px;
+  color: #dc3545;
+}
+
+.shipping-error-message span {
+  color: #000 !important;
+  font-size: 0.9rem;
+}
+.cart-page-wrapper {
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.delivery-options {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.delivery-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.delivery-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.delivery-label:hover {
+  border-color: #aaa;
+}
+
+.delivery-logo {
+  width: 80px;
+  height: auto;
+  margin-bottom: 10px;
+}
+
+/* Стиль для выбранного метода доставки */
+.delivery-option input:checked + .delivery-label {
+  border-color: #2196F3;
+  background-color: rgba(33, 150, 243, 0.1);
+}
 </style>

@@ -21,12 +21,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+env = Env()
+env.read_env()
+
 # Настройки API Почты России
 POCHTA_API_TOKEN = 'zmI6LeNHjYFpbD_g04BLbg3sHOZz6GFK'  # Замените на ваш токен
 POCHTA_API_KEY = 'd29jeG9kLnZzaGRAeWFuZGV4LnJ1OndvY3hvZCFnb2RubzE='     # Замените на ваш ключ
+POCHTA_API_URL = 'https://otpravka-api.pochta.ru'
 
-env = Env()
-env.read_env()
+CDEK_CLIENT_ID = env.str("CDEK_CLIENT_ID", default="wqGwiQx0gg8mLtiEKsUinjVSICCjtTEP")  # Замените на ваш ID клиента
+CDEK_CLIENT_SECRET = env.str("CDEK_CLIENT_SECRET", default="RmAmgvSgSl1yirlz9QupbzOJVqhCxcP5")  # Замените на ваш секрет
+CDEK_API_URL = env.str("CDEK_API_URL", default="https://api.edu.cdek.ru")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
