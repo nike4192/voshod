@@ -192,20 +192,47 @@
                     </small>
                   </div>
                 </div>
-                <div class="p-col-12">
-                  <!-- Интеграция компонента AddressNormalizer -->
+                <div v-if="!isCdekDelivery" class="field mb-4 address-field">
+                  <label for="delivery_address" class="block mb-2">Адрес доставки</label>
                   <AddressNormalizer
                       v-model="customerData.delivery_address"
-                      :error="v$.delivery_address.$invalid && v$.delivery_address.$dirty"
-                      ref="addressNormalizerRef"
-                      @blur="validateAddress"
                       @address-normalized="handleAddressNormalized"
+                      :error="v$.delivery_address.$error"
                   />
-                  <small v-if="v$.delivery_address.$invalid && v$.delivery_address.$dirty" class="p-error">
-                    {{ v$.delivery_address.$errors[0].$message }}
-                  </small>
                 </div>
-                <div class="p-col-12">
+
+                <!-- Поля для CDEK -->
+
+                <div v-if="customerData.delivery_method === 'cdek'">
+                <div class="p-col-12 p-md-6 pole">
+                  <div class="p-field">
+                    <label for="delivery_city" >Город</label>
+                    <CdekCitySelector
+                        v-model="customerData.delivery_city"
+                        :error="v$.delivery_city.$error"
+                        @city-selected="handleCdekCitySelected"
+                    />
+                    <small v-if="v$.delivery_city.$error" class="p-error">
+                      {{ v$.delivery_city.$errors[0].$message }}
+                    </small>
+                  </div>
+                </div>
+                <div class="p-col-12 p-md-6 pole">
+                  <div class="p-field">
+                    <label for="delivery_pickup_point" >Пункт выдачи</label>
+                    <CdekPickupPointSelector
+                        v-model="customerData.delivery_pickup_point"
+                        :city-code="selectedCdekCityCode"
+                        :error="v$.delivery_pickup_point.$error"
+                        @pickup-point-selected="handleCdekPickupPointSelected"
+                    />
+                    <small v-if="v$.delivery_pickup_point.$error" class="p-error">
+                      {{ v$.delivery_pickup_point.$errors[0].$message }}
+                    </small>
+                  </div>
+                </div>
+                  </div>
+                <div class="p-col-12" style="margin-top: 20px">
                   <div class="p-field">
                     <label for="delivery_comment">Комментарий к доставке (необязательно)</label>
                     <Textarea
@@ -229,8 +256,6 @@
           </div>
         </div>
       </div>
-      <div v-if="currentStep === 'cart'" class="cart-summary mt-3">
-    </div>
   </div>
   </div>
   <!-- Шаг 3: Подтверждение -->
@@ -282,20 +307,31 @@
           <span>{{ cartStore.totalWithShipping.toFixed(2) }} ₽</span>
         </div>
       </div>
+    <!-- Данные покупателя -->
+    <div class="customer-info p-4 mb-4 summary-box">
+      <h3>Данные получателя</h3>
+      <p><strong>Имя:</strong> {{ customerData.customer_name }}</p>
+      <p><strong>Email:</strong> {{ customerData.customer_email }}</p>
+      <p><strong>Телефон:</strong> {{ customerData.customer_phone }}</p>
 
-      <!-- Данные покупателя -->
-      <div class="customer-info p-4 mb-4 summary-box">
-        <h3>Данные получателя</h3>
-        <p><strong>Имя:</strong> {{ customerData.customer_name }}</p>
-        <p><strong>Email:</strong> {{ customerData.customer_email }}</p>
-        <p><strong>Телефон:</strong> {{ customerData.customer_phone }}</p>
+      <!-- Способ доставки -->
+      <p><strong>Способ доставки:</strong>
+        <span v-if="customerData.delivery_method === 'pochta_russia'">Почта России</span>
+        <span v-else-if="customerData.delivery_method === 'cdek'">СДЭК</span>
+      </p>
+
+      <!-- Информация о доставке в зависимости от метода -->
+      <template v-if="customerData.delivery_method === 'pochta_russia'">
         <p><strong>Адрес доставки:</strong> {{ customerData.delivery_address }}</p>
-        <p><strong>Способ доставки:</strong>
-          <span v-if="customerData.delivery_method === 'pochta_russia'">Почта России</span>
-          <span v-else-if="customerData.delivery_method === 'cdek'">СДЭК</span>
-        </p>
-        <p v-if="customerData.delivery_comment"><strong>Комментарий:</strong> {{ customerData.delivery_comment }}</p>
-      </div>
+      </template>
+
+      <template v-else-if="customerData.delivery_method === 'cdek'">
+        <p><strong>Город:</strong> {{ cdekCityDisplay }}</p>
+        <p><strong>Пункт выдачи:</strong> {{ cdekPickupPointDisplay }}</p>
+      </template>
+
+      <p v-if="customerData.delivery_comment"><strong>Комментарий:</strong> {{ customerData.delivery_comment }}</p>
+    </div>
 
       <!-- Кнопки управления -->
       <div class="d-flex justify-content-between mt-4">
@@ -324,10 +360,14 @@ import ProgressSpinner from 'primevue/progressspinner';
 import AddressNormalizer from '~/components/AddressNormalizer.vue';
 import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
+import CdekCitySelector from '~/components/CdekCitySelector.vue';
+import CdekPickupPointSelector from '~/components/CdekPickupPointSelector.vue';
 
 const toast = useToast();
 const router = useRouter();
 const cartStore = useCart();
+const selectedCdekCityCode = ref('');
+const selectedCdekPickupPointCode = ref('');
 
 // Текущий шаг оформления заказа
 const currentStep = ref('cart');
@@ -338,20 +378,43 @@ const customerData = ref({
   customer_email: '',
   customer_phone: '',
   delivery_address: '',
+  delivery_city: '',      // Новое поле для города
+  delivery_pickup_point: '',
   delivery_comment: '',
   delivery_method: 'pochta_russia'
 });
 
+const isCdekDelivery = computed(() => {
+  return customerData.value.delivery_method === 'cdek';
+});
+
 // Правила валидации
-const rules = {
-  customer_name: { required: helpers.withMessage('Пожалуйста, введите ваше имя', required) },
-  customer_email: {
-    required: helpers.withMessage('Пожалуйста, введите ваш email', required),
-    email: helpers.withMessage('Пожалуйста, введите корректный email', email)
-  },
-  customer_phone: { required: helpers.withMessage('Пожалуйста, введите ваш телефон', required) },
-  delivery_address: { required: helpers.withMessage('Пожалуйста, введите адрес доставки', required) }
-};
+const rules = computed(() => {
+  const baseRules = {
+    customer_name: { required: helpers.withMessage('Введите ваше имя', required) },
+    customer_email: {
+      required: helpers.withMessage('Введите email', required),
+      email: helpers.withMessage('Введите корректный email', email)
+    },
+    customer_phone: { required: helpers.withMessage('Введите номер телефона', required) }
+  };
+
+  // Добавляем правила в зависимости от метода доставки
+  if (customerData.value.delivery_method === 'cdek') {
+    return {
+      ...baseRules,
+      delivery_city: { required: helpers.withMessage('', required) },
+      delivery_pickup_point: { required: helpers.withMessage('', required) }
+    };
+  } else {
+    return {
+      ...baseRules,
+      delivery_address: { required: helpers.withMessage('', required) }
+    };
+  }
+});
+
+const v$ = useVuelidate(rules, customerData);
 
 function handleDeliveryMethodChange() {
   console.log('Изменен способ доставки на:', customerData.value.delivery_method);
@@ -369,9 +432,49 @@ function handleDeliveryMethodChange() {
   }
 }
 
-// Инициализация Vuelidate
-const v$ = useVuelidate(rules, customerData);
+function handleCdekCitySelected(city) {
+  if (city) {
+    selectedCdekCityCode.value = city.code;
+    console.log('Выбран город CDEK:', city);
 
+    // Если вам нужно сохранить дополнительные данные о городе
+    if (cartStore.setSelectedCdekCity) {
+      cartStore.setSelectedCdekCity(city);
+    }
+  } else {
+    selectedCdekCityCode.value = '';
+  }
+
+  // Сбрасываем выбранный пункт выдачи при смене города
+  customerData.value.delivery_pickup_point = '';
+  selectedCdekPickupPointCode.value = '';
+}
+
+// Обработчик выбора пункта выдачи CDEK
+function handleCdekPickupPointSelected(point) {
+  if (point) {
+    selectedCdekPickupPointCode.value = point.code;
+    console.log('Выбран пункт выдачи CDEK:', point);
+
+    // Сохраняем выбранный пункт выдачи в хранилище
+    if (cartStore.setSelectedCdekPickupPoint) {
+      // Сохраняем полную информацию о пункте выдачи
+      cartStore.setSelectedCdekPickupPoint({
+        code: point.code,
+        address: point.address,
+        name: point.name || '',
+        workTime: point.workTime || '',
+        phone: point.phone || ''
+      });
+    }
+  } else {
+    selectedCdekPickupPointCode.value = '';
+    // Очищаем значение в хранилище
+    if (cartStore.setSelectedCdekPickupPoint) {
+      cartStore.setSelectedCdekPickupPoint(null);
+    }
+  }
+}
 // Ссылка на компонент AddressNormalizer
 const addressNormalizerRef = ref(null);
 
@@ -434,8 +537,73 @@ const validateAddress = async () => {
   }
 };
 
+const cdekCityDisplay = computed(() => {
+  if (customerData.value.delivery_method === 'cdek') {
+    // Если есть выбранный город в хранилище
+    if (cartStore.selectedCdekCity && cartStore.selectedCdekCity.fullName) {
+      return cartStore.selectedCdekCity.fullName;
+    }
+    // Иначе используем значение из формы
+    return customerData.value.delivery_city || 'Не указан';
+  }
+  return '';
+});
+
+const cdekPickupPointDisplay = computed(() => {
+  if (customerData.value.delivery_method === 'cdek') {
+    // Если есть выбранный пункт выдачи в хранилище
+    if (cartStore.selectedCdekPickupPoint) {
+      const address = cartStore.selectedCdekPickupPoint.address || '';
+
+      // Получаем название города из выбранного города СДЭК
+      let cityName = '';
+      if (cartStore.selectedCdekCity && cartStore.selectedCdekCity.fullName) {
+        // Извлекаем название города из полного названия (например, "Оренбург, Оренбургская область")
+        const cityParts = cartStore.selectedCdekCity.fullName.split(',');
+        cityName = cityParts[0].trim();
+      }
+
+      // Если не удалось получить название города из выбранного города, пытаемся извлечь из адреса
+      if (!cityName) {
+        const addressParts = address.split(',').map(part => part.trim());
+        // Ищем часть адреса, которая содержит название города
+        for (let i = 0; i < addressParts.length; i++) {
+          const part = addressParts[i];
+          // Обычно город идет после области/региона и перед улицей
+          if (i >= 3 && !part.toLowerCase().includes('область') &&
+              !part.toLowerCase().includes('ул.') && !part.toLowerCase().includes('улица')) {
+            cityName = part;
+            break;
+          }
+        }
+      }
+
+      // Ищем улицу (часть с "ул." или "улица")
+      let street = '';
+      const addressParts = address.split(',').map(part => part.trim());
+      for (const part of addressParts) {
+        if (part.toLowerCase().includes('ул.') || part.toLowerCase().includes('улица')) {
+          street = part;
+          break;
+        }
+      }
+
+      // Если нашли и город, и улицу, формируем красивый адрес
+      if (cityName && street) {
+        return `${cityName}, ${street} (${address})`;
+      }
+
+      // Если не удалось найти город или улицу, возвращаем полный адрес
+      return address;
+    }
+
+    // Если нет данных в хранилище, используем значение из формы
+    return customerData.value.delivery_pickup_point || 'Не указан';
+  }
+
+  return '';
+});
 // Функция для перехода к шагу "Подтверждение"
-// Переход к подтверждению заказа
 async function goToConfirmation() {
   try {
     // Запускаем валидацию
@@ -457,42 +625,140 @@ async function goToConfirmation() {
     // Устанавливаем выбранный способ доставки в хранилище
     cartStore.setDeliveryMethod(customerData.value.delivery_method);
 
+    // Обработка в зависимости от выбранного способа доставки
+    if (customerData.value.delivery_method === 'cdek') {
+      // ====== Обработка доставки CDEK ======
 
-    // Если индекс доставки есть, но стоимость доставки еще не рассчитана, рассчитываем
-    if (cartStore.deliveryIndex && cartStore.shippingCost === 0 && !cartStore.shippingLoading) {
+      // Проверяем, что данные выбраны и переданы в хранилище
+      if (!cartStore.selectedCdekCity || !cartStore.selectedCdekPickupPoint) {
+        console.log('Проверка данных CDEK:', {
+          city: cartStore.selectedCdekCity,
+          point: cartStore.selectedCdekPickupPoint
+        });
+
+        // Если данных нет в хранилище, но они есть в компоненте, передаем их
+        if (selectedCdekCityCode.value && !cartStore.selectedCdekCity && cartStore.setSelectedCdekCity) {
+          // Получаем данные города из компонента CdekCitySelector
+          const cityElement = document.querySelector('.p-autocomplete-token-label');
+          if (cityElement) {
+            const cityName = cityElement.textContent;
+            cartStore.setSelectedCdekCity({
+              code: selectedCdekCityCode.value,
+              fullName: cityName || 'Неизвестный город'
+            });
+          }
+        }
+
+        if (selectedCdekPickupPointCode.value && !cartStore.selectedCdekPickupPoint && cartStore.setSelectedCdekPickupPoint) {
+          // Получаем данные пункта выдачи из компонента CdekPickupPointSelector
+          const pointElement = document.querySelector('.p-dropdown-label');
+          if (pointElement) {
+            const pointAddress = pointElement.textContent;
+            cartStore.setSelectedCdekPickupPoint({
+              code: selectedCdekPickupPointCode.value,
+              address: pointAddress || 'Неизвестный адрес'
+            });
+          }
+        }
+      }
+
+      // Запускаем расчет доставки CDEK
       try {
         await cartStore.calculateShipping();
       } catch (error) {
-        console.error('Ошибка при расчете доставки:', error);
-        // Устанавливаем стоимость по умолчанию
+        console.error('Ошибка при расчете доставки CDEK:', error);
+        cartStore.shippingCost = 300;
+        cartStore.shippingError = 'Не удалось рассчитать стоимость доставки CDEK. Используется стоимость по умолчанию.';
+      }
+    } else {
+      // ====== Обработка доставки Почтой России ======
+
+      // Если индекс доставки есть, но стоимость доставки еще не рассчитана, рассчитываем
+      if (cartStore.deliveryIndex && cartStore.shippingCost === 0 && !cartStore.shippingLoading) {
+        console.log('Расчет доставки Почтой России по имеющемуся индексу:', cartStore.deliveryIndex);
+        try {
+          await cartStore.calculateShipping();
+        } catch (error) {
+          console.error('Ошибка при расчете доставки Почтой России:', error);
+          // Устанавливаем стоимость по умолчанию
+          cartStore.shippingCost = 300;
+          cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
+        }
+      }
+      // Если индекса нет, но адрес есть, пытаемся извлечь индекс из адреса
+      else if (!cartStore.deliveryIndex && customerData.value.delivery_address) {
+        console.log('Попытка извлечь индекс из адреса:', customerData.value.delivery_address);
+        const addressStr = customerData.value.delivery_address;
+        const match = addressStr.match(/\b(\d{6})\b/);
+
+        if (match) {
+          console.log('Индекс извлечен из адреса:', match[1]);
+          cartStore.saveDeliveryIndex(match[1]);
+
+          try {
+            await cartStore.calculateShipping();
+          } catch (error) {
+            console.error('Ошибка при расчете доставки после извлечения индекса:', error);
+            // Устанавливаем стоимость по умолчанию
+            cartStore.shippingCost = 300;
+            cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
+          }
+        } else {
+          console.warn('Индекс не найден в адресе, запрашиваем у пользователя');
+          // Если индекс не найден, предлагаем пользователю ввести его вручную
+          const userIndex = prompt('Пожалуйста, введите почтовый индекс для расчета стоимости доставки:', '');
+
+          if (userIndex && /^\d{6}$/.test(userIndex.trim())) {
+            console.log('Пользователь ввел индекс:', userIndex.trim());
+            cartStore.saveDeliveryIndex(userIndex.trim());
+
+            try {
+              await cartStore.calculateShipping();
+            } catch (error) {
+              console.error('Ошибка при расчете доставки после ввода индекса пользователем:', error);
+              cartStore.shippingCost = 300;
+              cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
+            }
+          } else {
+            console.warn('Пользователь не ввел корректный индекс');
+            // Если индекс не найден, устанавливаем стоимость по умолчанию
+            cartStore.shippingCost = 300;
+            cartStore.shippingError = 'Не удалось определить индекс для расчета доставки. Используется стоимость по умолчанию.';
+          }
+        }
+      }
+      // Если ни индекса, ни адреса нет
+      else if (!cartStore.deliveryIndex && !customerData.value.delivery_address) {
+        console.warn('Ни индекс, ни адрес не указаны');
+        cartStore.shippingCost = 300;
+        cartStore.shippingError = 'Адрес доставки не указан. Используется стоимость по умолчанию.';
+      }
+      // Если стоимость доставки уже рассчитана
+      else if (cartStore.shippingCost > 0) {
+        console.log('Стоимость доставки уже рассчитана:', cartStore.shippingCost);
+      }
+      // Если что-то пошло не так
+      else {
+        console.warn('Неизвестная ситуация при расчете доставки');
         cartStore.shippingCost = 300;
         cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
       }
     }
 
-    // Если индекса нет, но адрес есть, пытаемся извлечь индекс из адреса
-    if (!cartStore.deliveryIndex && customerData.value.delivery_address) {
-      const addressStr = customerData.value.delivery_address;
-      const match = addressStr.match(/\b(\d{6})\b/);
-      if (match) {
-        cartStore.saveDeliveryIndex(match[1]);
-        try {
-          await cartStore.calculateShipping();
-        } catch (error) {
-          console.error('Ошибка при расчете доставки:', error);
-          // Устанавливаем стоимость по умолчанию
-          cartStore.shippingCost = 300;
-          cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
-        }
-      } else {
-        // Если индекс не найден, устанавливаем стоимость по умолчанию
-        cartStore.shippingCost = 300;
-        cartStore.shippingError = 'Не удалось определить индекс для расчета доставки. Используется стоимость по умолчанию.';
+    // Дополнительная проверка - если стоимость доставки все еще 0, устанавливаем значение по умолчанию
+    if (cartStore.shippingCost === 0) {
+      console.warn('После всех проверок стоимость доставки все еще 0, устанавливаем по умолчанию');
+      cartStore.shippingCost = 300;
+      if (!cartStore.shippingError) {
+        cartStore.shippingError = 'Не удалось рассчитать стоимость доставки. Используется стоимость по умолчанию.';
       }
     }
 
     // Переходим к шагу подтверждения
     currentStep.value = 'confirmation';
+
+    // Прокручиваем страницу вверх для лучшего пользовательского опыта
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
   } catch (error) {
     console.error('Ошибка при переходе к подтверждению:', error);
@@ -503,9 +769,9 @@ async function goToConfirmation() {
       life: 3000
     });
   }
-}
+}// Возврат к шагу доставки
 
-// Возврат к шагу доставки
+
 
 
 // Вычисляемое свойство для форматированного адреса доставки
@@ -556,11 +822,28 @@ async function processPayment() {
       customer_name: customerData.value.customer_name,
       customer_email: customerData.value.customer_email,
       customer_phone: customerData.value.customer_phone,
-      delivery_address: customerData.value.delivery_address,
       delivery_comment: customerData.value.delivery_comment || '',
       shipping_cost: cartStore.shippingCost,
-      delivery_index: cartStore.deliveryIndex
+      delivery_method: customerData.value.delivery_method
     };
+
+    // Добавляем специфические данные в зависимости от метода доставки
+    if (customerData.value.delivery_method === 'pochta_russia') {
+      orderData.delivery_address = customerData.value.delivery_address;
+      orderData.delivery_index = cartStore.deliveryIndex;
+    } else if (customerData.value.delivery_method === 'cdek') {
+      // Для СДЭК добавляем информацию о городе и пункте выдачи
+      if (cartStore.selectedCdekCity) {
+        orderData.cdek_city_code = cartStore.selectedCdekCity.code;
+        orderData.cdek_city_name = cartStore.selectedCdekCity.fullName;
+      }
+
+      if (cartStore.selectedCdekPickupPoint) {
+        orderData.cdek_point_code = cartStore.selectedCdekPickupPoint.code;
+        orderData.cdek_point_address = cartStore.selectedCdekPickupPoint.address;
+        orderData.cdek_point_name = cartStore.selectedCdekPickupPoint.name;
+      }
+    }
 
     console.log('Отправляемые данные заказа:', orderData);
 
@@ -599,6 +882,7 @@ async function processPayment() {
     });
   }
 }
+
 
 // Обработчик нормализации адреса
 async function handleAddressNormalized(normalizedAddress) {
@@ -784,6 +1068,22 @@ watch(() => cartStore.cartProducts, (newValue) => {
     });
   }
 }, { deep: true });
+
+// Отслеживаем изменения метода доставки для сброса валидации
+watch(() => customerData.value.delivery_method, () => {
+  // Сбрасываем ошибки валидации при изменении метода доставки
+  v$.value.$reset();
+
+  // Очищаем поля в зависимости от выбранного метода доставки
+  if (customerData.value.delivery_method === 'cdek') {
+    customerData.value.delivery_address = '';
+  } else {
+    customerData.value.delivery_city = '';
+    customerData.value.delivery_pickup_point = '';
+    selectedCdekCityCode.value = '';
+    selectedCdekPickupPointCode.value = '';
+  }
+});
 
 // Загрузка данных при монтировании компонента
 onMounted(async () => {
@@ -1207,4 +1507,177 @@ onMounted(async () => {
   border-color: #2196F3;
   background-color: rgba(33, 150, 243, 0.1);
 }
+
+@media (max-width: 768px) {
+  /* Общие контейнеры */
+  .cart-page-wrapper {
+    padding: 10px;
+  }
+
+  /* Шаги */
+  .steps-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .step {
+    flex-direction: row;
+    justify-content: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .step-connector {
+    display: none;
+  }
+
+  .step-number {
+    margin-right: 10px;
+    margin-bottom: 0;
+  }
+
+  /* Корзина */
+  .cart-step {
+    flex-direction: column;
+  }
+
+  .cart-items, .cart-summary {
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .cart-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cart-item-image {
+    margin-bottom: 10px;
+    align-self: center;
+  }
+
+  /* Доставка */
+  .delivery-options {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .delivery-label {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .delivery-logo {
+    width: 50px;
+    margin-right: 10px;
+    margin-bottom: 0;
+  }
+
+  /* Подтверждение заказа */
+  .order-summary, .customer-info {
+    padding: 15px;
+  }
+
+  /* Кнопки */
+  .p-button {
+    width: 100%;
+  }
+
+  /* Типографика */
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+  }
+
+  /* Поля ввода */
+  .p-inputtext, .p-dropdown {
+    width: 100%;
+  }
+
+  /* Адаптивность изображений */
+  .product-image, .cart-item-image img {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .cart-page-wrapper {
+    padding: 5px;
+  }
+
+  .steps-container {
+    margin-bottom: 10px;
+  }
+
+  .step-text {
+    font-size: 0.8rem;
+  }
+
+  .summary-box {
+    padding: 10px;
+  }
+
+  .summary-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .summary-row span {
+    margin-bottom: 5px;
+  }
+}
+/* Стили для кнопок выбора способа доставки */
+.delivery-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.delivery-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 56px; /* Фиксированная высота для обеих кнопок */
+  padding: 0 15px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  transition: all 0.3s;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.delivery-logo {
+  height: 32px; /* Фиксированная высота для логотипов */
+  width: auto;
+  margin-right: 10px;
+  margin-bottom: 0;
+  object-fit: contain;
+}
+
+/* Стиль для выбранного метода доставки */
+.delivery-option input:checked + .delivery-label {
+  border-color: #2196F3;
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+/* Медиа-запрос для мобильных устройств */
+@media (max-width: 768px) {
+  .delivery-label {
+    height: 56px; /* Сохраняем ту же высоту на мобильных */
+  }
+}
+.pole{
+  margin-top: 8px
+}
+
+
 </style>

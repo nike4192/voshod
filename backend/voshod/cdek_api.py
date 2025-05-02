@@ -46,43 +46,249 @@ class CDEKApi:
 
         return self.token
 
-    def calculate_shipping(self, postal_code, weight, length=2, width=2, height=1000):
+    def calculate_shipping(self, city, address, weight, length=2, width=2, height=1000):
         """
-        Расчет стоимости доставки CDEK
+        Расчет стоимости доставки CDEK по названию города и адресу
 
         Args:
-            postal_code: Почтовый индекс получателя
-            weight: Вес посылки в граммах
-            length, width, height: Размеры посылки в см
+            city (str): Название города (не код)
+            address (str): Адрес пункта выдачи
+            weight (int): Вес отправления в граммах
+            length (int): Длина отправления в см
+            width (int): Ширина отправления в см
+            height (int): Высота отправления в см
 
         Returns:
-            dict: Информация о стоимости доставки
+            dict: Результат расчета доставки или информация об ошибке
         """
+        # Убедимся, что у нас есть действующий токен
         token = self.ensure_token()
-
         if not token:
-            return {"error": "Failed to get CDEK authentication token"}
+            return {"status": "error", "message": "Failed to get CDEK auth token"}
 
-        url = f"{self.base_url}/v2/calculator/tarifflist"
+        # Сначала найдем код города по его названию
+        city_result = self.suggest_cities(city)
+
+        if "error" in city_result:
+            return {"status": "error", "message": f"Failed to find city: {city_result['error']}"}
+
+        if not city_result.get("cities") or len(city_result["cities"]) == 0:
+            return {"status": "error", "message": f"City '{city}' not found"}
+
+        # Берем первый найденный город
+        city_code = city_result["cities"][0]["code"]
+
+        # Теперь найдем пункт выдачи по адресу
+        delivery_points_result = self.get_delivery_points(city_code)
+
+        if "error" in delivery_points_result:
+            return {"status": "error", "message": f"Failed to get delivery points: {delivery_points_result['error']}"}
+
+        if not delivery_points_result.get("delivery_points") or len(delivery_points_result["delivery_points"]) == 0:
+            return {"status": "error", "message": f"No delivery points found in city '{city}'"}
+
+        # Ищем пункт выдачи по адресу
+        pickup_point_code = None
+        for point in delivery_points_result["delivery_points"]:
+            if address.lower() in point["address"].lower():
+                pickup_point_code = point["code"]
+                break
+
+        if not pickup_point_code:
+            return {"status": "error", "message": f"Delivery point with address '{address}' not found"}
+
+        # Теперь выполняем расчет стоимости доставки
+        url = f"{self.base_url}/v2/calculator/tariff"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        # Формируем данные для запроса
+        payload = {
+            "tariff_code": 136,  # Код тарифа для самовывоза (136 - посылка склад-склад)
+            "from_location": {
+                "code": 270  # Код города отправления (например, Москва)
+            },
+            "to_location": {
+                "code": city_code
+            },
+            "packages": [{
+                "weight": weight,
+                "length": length,
+                "width": width,
+                "height": height
+            }]
+        }
+
+        try:
+            response = requests.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            result = response.json()
+
+            # Извлекаем стоимость доставки
+            shipping_cost = 0
+            if "total_sum" in result:
+                shipping_cost = result["total_sum"]
+
+            return {
+                "status": "success",
+                "shipping_cost": shipping_cost
+            }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error calculating CDEK shipping: {e}")
+            return {"status": "error", "message": f"Error calculating shipping: {str(e)}"}
+
+    def suggest_cities(self, city_name):
+        """
+        Поиск городов по названию для автозаполнения
+
+        Args:
+            city_name (str): Название города для поиска
+
+        Returns:
+            dict: Результат поиска городов или информация об ошибке
+        """
+        # Убедимся, что у нас есть действующий токен
+        token = self.ensure_token()
+        if not token:
+            return {"error": "Failed to get CDEK auth token"}
+
+        url = f"{self.base_url}/v2/location/suggest/cities"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        params = {
+            "country_code": "RU",
+            "name": city_name
+        }
+
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            result = response.json()
+
+            return {
+                "status": "success",
+                "cities": result
+            }
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error suggesting CDEK cities: {e}")
+            return {"error": f"CDEK API request failed: {str(e)}"}
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing CDEK response: {e}")
+            return {"error": "Failed to parse CDEK API response"}
+
+    def get_delivery_points(self, city_code):
+        """
+        Получение списка пунктов выдачи CDEK по коду города
+
+        Args:
+            city_code (str): Код города в системе CDEK
+
+        Returns:
+            dict: Результат запроса с пунктами выдачи или информацией об ошибке
+        """
+        # Проверяем наличие токена
+        token = self.ensure_token()
+        if not token:
+            return {"error": "Не удалось получить токен авторизации CDEK"}
+
+        url = f"{self.base_url}/v2/deliverypoints"
 
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
 
+        params = {
+            "city_code": city_code
+        }
+
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+
+            delivery_points = response.json()
+
+            # Преобразуем данные для удобства использования
+            simplified_points = []
+
+            for point in delivery_points:
+                # Получаем адрес из местоположения
+                address = point.get("location", {}).get("address_full", "")
+                if not address:
+                    address = point.get("location", {}).get("address", "")
+
+                # Создаем упрощенный объект пункта выдачи
+                simplified_point = {
+                    "code": point.get("code", ""),
+                    "name": point.get("name", ""),
+                    "address": address,
+                    "work_time": point.get("work_time", ""),
+                    "type": point.get("type", ""),
+                    "phone": next((p.get("number", "") for p in point.get("phones", []) if "number" in p), "")
+                }
+
+                simplified_points.append(simplified_point)
+
+            return {
+                "status": "success",
+                "delivery_points": simplified_points
+            }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error getting CDEK delivery points: {e}")
+            return {"error": f"Ошибка при получении пунктов выдачи CDEK: {str(e)}"}
+
+    def calculate_tarifflist(self, from_location_code, to_location_code, to_city_name, to_address, weight, length=20,
+                             width=20, height=20):
+        """
+        Расчет стоимости доставки CDEK через tarifflist
+
+        Args:
+            from_location_code (int): Код города отправления
+            to_location_code (int): Код города назначения
+            to_city_name (str): Название города назначения
+            to_address (str): Адрес доставки в городе назначения
+            weight (int): Вес отправления в граммах
+            length (int): Длина отправления в см
+            width (int): Ширина отправления в см
+            height (int): Высота отправления в см
+
+        Returns:
+            dict: Результат расчета доставки или информация об ошибке
+        """
+        # Убедимся, что у нас есть действующий токен
+        token = self.ensure_token()
+        if not token:
+            return {"error": "Failed to get CDEK auth token"}
+
+        # Логирование для отладки
+        logger.info(
+            f"Calculating CDEK tarifflist: from_code={from_location_code}, to_code={to_location_code}, to_city={to_city_name}, weight={weight}")
+
+        url = f"{self.base_url}/v2/calculator/tarifflist"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        # Формируем данные для запроса согласно документации CDEK API
         payload = {
-            "date": "",
-            "type": 1,
-            "lang": "rus",
             "from_location": {
-                "postal_code": "119071",
+                "code": int(from_location_code),
                 "country_code": "RU",
-                "contragent_type": "LEGAL_ENTITY"
+                "city": "Москва",
+                "address": "ул. Динамовская, 1А, 110а"
             },
             "to_location": {
-                "postal_code": postal_code,
+                "code": int(to_location_code),
                 "country_code": "RU",
-                "contragent_type": "INDIVIDUAL"
+                "city": to_city_name,
+                "address": to_address
             },
             "packages": [
                 {
@@ -95,31 +301,26 @@ class CDEKApi:
         }
 
         try:
-            response = requests.post(url, headers=headers, json=payload)
-            response.raise_for_status()
+            # Логирование запроса
+            logger.info(f"CDEK API request to tarifflist: {url}, payload: {json.dumps(payload)}")
 
+            response = requests.post(url, headers=headers, json=payload)
+
+            # Логирование ответа
+            logger.info(f"CDEK API response status: {response.status_code}")
+            logger.info(f"CDEK API response content: {response.text[:500]}")  # Первые 500 символов для краткости
+
+            response.raise_for_status()
             result = response.json()
 
-            # Ищем тариф с кодом 482 (Экспресс склад-дверь)
-            shipping_cost = None
+            # Проверяем наличие ошибок в ответе API
+            if "errors" in result and result["errors"]:
+                error_msg = "; ".join([error.get("message", "Unknown error") for error in result["errors"]])
+                logger.error(f"CDEK API returned errors: {error_msg}")
+                return {"error": error_msg}
 
-            for tariff in result.get("tariff_codes", []):
-                if tariff.get("tariff_code") == 482:
-                    shipping_cost = tariff.get("delivery_sum")
-                    break
-
-            if shipping_cost is None:
-                return {"error": "Tariff code 482 not found in CDEK response"}
-
-            return {
-                "status": "success",
-                "shipping_cost": shipping_cost,
-                "full_response": result  # Можно убрать в продакшене
-            }
+            return result
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error calculating CDEK shipping: {e}")
-            return {"error": f"CDEK API request failed: {str(e)}"}
-        except json.JSONDecodeError as e:
-            logger.error(f"Error parsing CDEK response: {e}")
-            return {"error": "Failed to parse CDEK API response"}
+            logger.error(f"Error calculating CDEK tarifflist: {e}")
+            return {"error": f"Error calculating tarifflist: {str(e)}"}

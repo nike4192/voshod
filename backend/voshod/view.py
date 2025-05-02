@@ -138,111 +138,135 @@ def remove_from_cart(request, product_id):
     else:
         return JsonResponse({'status': 'error', 'message': 'Товар не найден в корзине'}, status=404)
 
-
 @api_view(['POST'])
+@transaction.atomic
 def process_payment(request):
-    cart = request.session.get('cart', {})
-    if not cart:
-        return JsonResponse({'status': 'error', 'message': 'Корзина пуста'}, status=400)
-
-    # Получаем данные из запроса
-    data = request.data
-    print(f"Received payment data: {data}")
-
-    # Проверяем наличие товаров на складе
-    insufficient_stock = []
-    for product_id, item in cart.items():
-        try:
-            product = Product.objects.get(id=product_id)
-            print(f"Product {product.id}: stock={product.stock}, quantity={item['quantity']}")
-            if product.stock < item['quantity']:
-                insufficient_stock.append({
-                    'id': product.id,
-                    'name': product.name,
-                    'available': product.stock,
-                    'requested': item['quantity']
-                })
-        except Product.DoesNotExist:
-            print(f"Product with ID {product_id} not found")
-            return JsonResponse({'status': 'error', 'message': f'Товар с ID {product_id} не найден'}, status=404)
-        except Exception as e:
-            print(f"Error checking product {product_id}: {str(e)}")
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-    # Если есть товары с недостаточным количеством на складе
-    if insufficient_stock:
-        return JsonResponse({
-            'status': 'error',
-            'message': 'Недостаточно товаров на складе',
-            'insufficient_items': insufficient_stock
-        }, status=400)
-
-    # Если все товары доступны, обрабатываем заказ
+    """
+    API-представление для обработки платежа и создания заказа
+    """
     try:
-        with transaction.atomic():  # Используем транзакцию для обеспечения целостности данных
-            # Создаем заказ
-            total_price = 0
-            for product_id, item in cart.items():
-                product = Product.objects.get(id=product_id)
-                total_price += product.price * item['quantity']
+        # Получаем данные из запроса
+        data = request.data
+        customer_name = data.get('customer_name')
+        customer_email = data.get('customer_email')
+        customer_phone = data.get('customer_phone')
+        delivery_method = data.get('delivery_method', 'pochta_russia')
+        delivery_comment = data.get('delivery_comment', '')
 
-            # Получаем данные пользователя из запроса
-            # Используем правильные имена полей, соответствующие фронтенду
-            customer_name = data.get('customer_name', '')
-            customer_email = data.get('customer_email', '')
-            customer_phone = data.get('customer_phone', '')
-            customer_address = data.get('delivery_address', '')
-            postal_code = ''
+        # Получаем корзину из сессии
+        cart = request.session.get('cart', {})
 
-            # Если есть нормализованный адрес, используем данные из него
-            normalized_address = data.get('normalized_address', {})
-            if normalized_address:
-                # Если есть индекс в нормализованном адресе, используем его
-                if normalized_address.get('index'):
-                    postal_code = normalized_address.get('index')
+        if not cart:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Корзина пуста'
+            }, status=400)
 
-            # Создаем заказ с адресом и индексом
-            order = Order.objects.create(
-                customer_name=customer_name,
-                customer_email=customer_email,
-                customer_phone=customer_phone,
-                customer_address=customer_address,
-                postal_code=postal_code,
-                total_price=total_price,
-                status='pending'
-            )
-            print(f"Order created with ID: {order.id}")
+        # Рассчитываем общую стоимость
+        total_price = 0
+        for product_id, item_data in cart.items():
+            try:
+                product = Product.objects.get(pk=product_id)
+                quantity = item_data['quantity']
+                total_price += float(product.price) * quantity
+            except Product.DoesNotExist:
+                logger.warning(f"Product with ID {product_id} not found")
+                continue
 
-            # Создаем элементы заказа и обновляем stock
-            for product_id, item in cart.items():
-                product = Product.objects.get(id=product_id)
-                print(f"Creating order item: product={product.id}, quantity={item['quantity']}")
+        # Создаем заказ
+        order = Order(
+            customer_name=customer_name,
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            total_price=total_price,
+            delivery_method=delivery_method,
+            delivery_comment=delivery_comment
+        )
+
+        # Добавляем информацию о доставке в зависимости от метода
+        if delivery_method == 'cdek':
+            # Получаем данные для CDEK
+            cdek_city_code = data.get('cdek_city_code', '')
+            cdek_city_name = data.get('cdek_city_name', '')
+            cdek_point_code = data.get('cdek_point_code', '')
+            cdek_point_address = data.get('cdek_point_address', '')
+            cdek_point_name = data.get('cdek_point_name', '')
+
+            # Сохраняем данные CDEK
+            order.delivery_city = cdek_city_name
+            order.cdek_city_code = cdek_city_code
+            order.cdek_pickup_point_code = cdek_point_code
+            order.delivery_address = f"{cdek_point_name} ({cdek_point_address})"
+
+            # Получаем стоимость доставки CDEK
+            shipping_cost = data.get('shipping_cost', 0)
+            order.shipping_cost = shipping_cost
+        else:  # pochta_russia
+            delivery_address = data.get('delivery_address', '')
+            delivery_index = data.get('delivery_index', '')
+            order.delivery_address = delivery_address
+            order.postal_code = delivery_index
+            # Получаем стоимость доставки Почтой России
+            shipping_cost = data.get('shipping_cost', 0)
+            order.shipping_cost = shipping_cost
+
+        # Обновляем общую стоимость с учетом доставки
+        order.total_price += float(order.shipping_cost)
+
+        # Сохраняем заказ
+        order.save()
+
+        # Добавляем товары в заказ
+        for product_id, item_data in cart.items():
+            try:
+                product = Product.objects.get(pk=product_id)
+                quantity = item_data['quantity']
+
+                # Проверяем наличие товара на складе
+                if product.stock < quantity:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': f'Недостаточно товара "{product.name}" на складе. Доступно: {product.stock}, запрошено: {quantity}',
+                        'insufficient_items': [{
+                            'id': product.id,
+                            'name': product.name,
+                            'available': product.stock,
+                            'requested': quantity
+                        }]
+                    }, status=400)
+
                 # Создаем элемент заказа
                 OrderItem.objects.create(
                     order=order,
                     merch=product,
-                    quantity=item['quantity']
+                    quantity=quantity,
+                    price=product.price
                 )
-                # Обновляем количество товара на складе
-                product.stock -= item['quantity']
+
+                # Уменьшаем количество товара на складе
+                product.stock -= quantity
                 product.save()
-                print(f"Updated product stock: {product.id} now has {product.stock} items")
+            except Product.DoesNotExist:
+                logger.warning(f"Product with ID {product_id} not found")
+                continue
 
-            # Очищаем корзину
-            request.session['cart'] = {}
-            request.session.modified = True
-            return JsonResponse({
-                'status': 'success',
-                'message': 'Заказ успешно оформлен',
-                'order_id': order.id
-            })
+        # Очищаем корзину
+        request.session['cart'] = {}
+        request.session.modified = True
 
+        # Возвращаем успешный ответ
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Заказ успешно оформлен',
+            'order_id': order.id
+        })
     except Exception as e:
-        print(f"Error processing payment: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
+        logger.error(f"Error in process_payment: {str(e)}")
+        logger.error(traceback.format_exc())  # Добавляем полный стек-трейс для отладки
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Ошибка при обработке заказа: {str(e)}'
+        }, status=500)
 @api_view(['GET'])
 def get_cart_weight(request):
     cart = request.session.get('cart', {})
@@ -428,86 +452,96 @@ def address_suggestions(request):
 from .cdek_api import CDEKApi
 
 
-@api_view(['POST'])
+@api_view(['GET'])
 def calculate_cdek_shipping(request):
     """
-    Расчет стоимости доставки через API CDEK
+    API-представление для расчета стоимости доставки CDEK
     """
     try:
-        logger.debug("=== START calculate_cdek_shipping ===")
-        logger.debug(f"Request data: {request.data}")
+        # Получаем параметры запроса
+        city_code = request.GET.get('city_code', '')
+        city_name = request.GET.get('city_name', '')
+        address = request.GET.get('address', '')
+        weight = request.GET.get('weight', 0)
 
-        # Получаем данные из запроса
-        index_to = request.data.get('index_to')
+        # Логирование для отладки
+        logger.info(
+            f"CDEK shipping calculation request: city_code={city_code}, city_name={city_name}, address={address}, weight={weight}")
 
-        # Проверяем обязательные параметры
-        if not index_to:
+        try:
+            weight = int(weight)
+        except ValueError:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Recipient index is required'
+                'message': 'Вес должен быть числом'
             }, status=400)
 
-        # Получаем вес корзины
-        # Вместо вызова get_cart_weight напрямую, получаем вес другим способом
-        # Вариант 1: Получаем вес из запроса, если он передан
-        weight = request.data.get('mass')
+        if not city_code:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Необходимо указать код города'
+            }, status=400)
 
-        # Вариант 2: Если вес не передан, делаем отдельный запрос к API для получения веса
-        if not weight:
-            # Создаем новый HttpRequest для вызова get_cart_weight
-            from django.http import HttpRequest
-            from django.contrib.sessions.middleware import SessionMiddleware
+        if not address:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Необходимо указать адрес доставки'
+            }, status=400)
 
-            # Создаем новый HttpRequest
-            http_request = HttpRequest()
+        # Если название города не указано, используем значение по умолчанию
+        if not city_name:
+            city_name = "Город получателя"
 
-            # Копируем сессию из оригинального запроса
-            http_request.session = request.session
-
-            # Получаем ответ от функции get_cart_weight
-            weight_response = get_cart_weight(http_request)
-
-            # Парсим JSON-ответ для получения веса
-            import json
-            weight_data = json.loads(weight_response.content)
-
-            if weight_data.get('status') == 'success':
-                weight = weight_data.get('total_weight', 0)
-            else:
-                weight = 0
-
-        # Если вес равен 0, устанавливаем минимальное значение
-        if not weight or weight == 0:
-            weight = 0.1
-
-        # Преобразуем вес из кг в граммы для API CDEK
-        weight_grams = int(float(weight) * 1000)
-
-        logger.debug(f"Weight: {weight} kg, {weight_grams} g")
+        # Получаем код города отправления из настроек
+        from_location_code = getattr(settings, 'CDEK_FROM_LOCATION_CODE', 44)
 
         # Инициализируем API CDEK
         cdek_api = CDEKApi(
             client_id=settings.CDEK_CLIENT_ID,
-            client_secret=settings.CDEK_CLIENT_SECRET,
-            base_url=settings.CDEK_API_URL
+            client_secret=settings.CDEK_CLIENT_SECRET
         )
 
-        # Вызываем API CDEK
-        result = cdek_api.calculate_shipping(
-            postal_code=index_to,
-            weight=weight_grams
+        # Используем tarifflist для расчета стоимости доставки
+        tarifflist_result = cdek_api.calculate_tarifflist(
+            from_location_code=from_location_code,
+            to_location_code=city_code,
+            to_city_name=city_name,
+            to_address=address,
+            weight=weight
         )
 
-        logger.debug(f"CDEK API result: {result}")
-
-        if 'error' in result:
+        if "error" in tarifflist_result:
             return JsonResponse({
                 'status': 'error',
-                'message': result['error']
+                'message': f"Ошибка расчета тарифа: {tarifflist_result['error']}"
             }, status=400)
 
-        # Получаем стоимость доставки
-        shipping_cost = result.get('shipping_cost')
+        # Извлекаем стоимость доставки из ответа tarifflist
+        shipping_cost = 300  # Значение по умолчанию
+        delivery_time = None
+
+        # Ищем тариф с кодом 136 (посылка склад-склад) или другой подходящий тариф
+        if "tariff_codes" in tarifflist_result and tarifflist_result["tariff_codes"]:
+            for tariff in tarifflist_result["tariff_codes"]:
+                # Проверяем, есть ли тариф с кодом 136 (склад-склад)
+                if tariff.get("tariff_code") == 136:
+                    shipping_cost = tariff.get("delivery_sum", 300)
+                    delivery_time = {
+                        "min_days": tariff.get("period_min", 0),
+                        "max_days": tariff.get("period_max", 0)
+                    }
+                    break
+
+            # Если не нашли тариф 136, берем первый доступный тариф
+            if shipping_cost == 300 and tarifflist_result["tariff_codes"]:
+                first_tariff = tarifflist_result["tariff_codes"][0]
+                shipping_cost = first_tariff.get("delivery_sum", 300)
+                delivery_time = {
+                    "min_days": first_tariff.get("period_min", 0),
+                    "max_days": first_tariff.get("period_max", 0)
+                }
+        else:
+            logger.warning(f"No tariff_codes found in CDEK API response: {tarifflist_result}")
 
         # Формируем ответ
         response_data = {
@@ -515,13 +549,18 @@ def calculate_cdek_shipping(request):
             'shipping_cost': shipping_cost
         }
 
+        # Добавляем информацию о сроках доставки, если она есть
+        if delivery_time:
+            response_data['delivery_time'] = delivery_time
+
         return JsonResponse(response_data)
 
     except Exception as e:
-        logger.error(f"Error calculating CDEK shipping: {e}")
+        logger.error(f"Error in calculate_cdek_shipping: {str(e)}")
+        logger.error(traceback.format_exc())
         return JsonResponse({
             'status': 'error',
-            'message': str(e)
+            'message': f'Внутренняя ошибка сервера: {str(e)}'
         }, status=500)
 
 @api_view(['POST'])
@@ -607,4 +646,88 @@ def calculate_shipping_cost(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Internal server error: {str(e)}'
+        }, status=500)
+
+
+@api_view(['GET'])
+def suggest_cdek_cities(request):
+    """
+    API-представление для поиска городов CDEK по названию
+    """
+    try:
+        # Получаем параметр запроса
+        city_name = request.GET.get('query', '')
+
+        if not city_name or len(city_name) < 3:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Введите не менее 3 символов для поиска'
+            }, status=400)
+
+        # Инициализируем API CDEK с вашими учетными данными
+        cdek_api = CDEKApi(
+            client_id=settings.CDEK_CLIENT_ID,
+            client_secret=settings.CDEK_CLIENT_SECRET
+        )
+
+        # Получаем результаты поиска
+        result = cdek_api.suggest_cities(city_name)
+
+        if 'error' in result:
+            return JsonResponse({
+                'status': 'error',
+                'message': result['error']
+            }, status=400)
+
+        # Возвращаем результаты в формате, удобном для фронтенда
+        return JsonResponse({
+            'status': 'success',
+            'cities': result['cities']
+        })
+
+    except Exception as e:
+        logger.error(f"Error in suggest_cdek_cities: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Internal server error: {str(e)}'
+        }, status=500)
+
+
+@api_view(['GET'])
+def get_cdek_delivery_points(request):
+    """
+    API-представление для получения пунктов выдачи CDEK по коду города
+    """
+    try:
+        # Получаем параметр запроса
+        city_code = request.GET.get('city_code')
+        if not city_code:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Не указан код города'
+            }, status=400)
+
+        # Инициализируем API CDEK
+        cdek_api = CDEKApi(
+            client_id=settings.CDEK_CLIENT_ID,
+            client_secret=settings.CDEK_CLIENT_SECRET
+        )
+
+        # Получаем пункты выдачи
+        result = cdek_api.get_delivery_points(city_code)
+
+        if "error" in result:
+            return JsonResponse({
+                'status': 'error',
+                'message': result["error"]
+            }, status=400)
+
+        # Возвращаем результаты
+        return JsonResponse(result)
+
+    except Exception as e:
+        logger.error(f"Error in get_cdek_delivery_points: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Внутренняя ошибка сервера: {str(e)}'
         }, status=500)

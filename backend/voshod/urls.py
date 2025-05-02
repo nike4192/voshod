@@ -20,7 +20,7 @@ from .serializers import ProductViewSet
 from rest_framework.routers import DefaultRouter
 from django.conf.urls.static import static
 from django.conf import settings
-from voshod.view import get_cart, add_cart, get_cart_products, remove_from_cart, process_payment, get_cart_weight, normalize_address, address_suggestions, calculate_shipping_cost, calculate_cdek_shipping
+from voshod.view import get_cart, add_cart, get_cart_products, remove_from_cart, process_payment, get_cart_weight, normalize_address, address_suggestions, calculate_shipping_cost, calculate_cdek_shipping, suggest_cdek_cities, get_cdek_delivery_points
 
 from .view import get_csrf_token
 
@@ -41,5 +41,7 @@ urlpatterns = [
     path('api/address-suggestions/', address_suggestions, name='address_suggestions'),
     path('api/calculate-shipping/', calculate_shipping_cost, name='calculate_shipping_cost'),
     path('api/calculate-cdek-shipping/', calculate_cdek_shipping, name='calculate_cdek_shipping'),
+    path('api/suggest-cities/', suggest_cdek_cities, name='suggest_cdek_cities'),
+    path('api/cdek-delivery-points/', get_cdek_delivery_points, name='get_cdek_delivery_points'),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 # asd

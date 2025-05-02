@@ -1,4 +1,5 @@
 <template>
+<div class="index-page">
   <div>
     <!-- Шапка на всю ширину -->
     <div class="header-full-width">
@@ -42,18 +43,29 @@
         </div>
       </div>
     </div>
-  </div>
+  </div>|
+</div>
 </template>
 
 <script setup>
 import {useProducts} from '~/composables/useProduct.js';
 import {useCart} from '~/composables/useCart.js';
-import {ref, onMounted} from 'vue';
+import {ref, onMounted, onUnmounted} from 'vue';
 
 const products = ref([]);
 const error = ref(null);
 const router = useRouter();
 const cartStore = useCart();
+
+// Добавляем класс к body при монтировании компонента
+onMounted(() => {
+  document.body.classList.add('index-page-active');
+});
+
+// Удаляем класс при размонтировании компонента
+onUnmounted(() => {
+  document.body.classList.remove('index-page-active');
+});
 
 const basket = () => {
   router.push('/cart');
@@ -67,8 +79,21 @@ onMounted(async () => {
 })
 </script>
 
+
 <style>
 /* Стили, адаптированные под тему Aura Dark Noir */
+.index-page {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+/* Применяем стили к body только когда активна страница index */
+body.index-page-active {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
 
 /* Шапка на всю ширину */
 .header-full-width {

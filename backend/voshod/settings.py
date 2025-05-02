@@ -32,6 +32,7 @@ POCHTA_API_URL = 'https://otpravka-api.pochta.ru'
 CDEK_CLIENT_ID = env.str("CDEK_CLIENT_ID", default="wqGwiQx0gg8mLtiEKsUinjVSICCjtTEP")  # Замените на ваш ID клиента
 CDEK_CLIENT_SECRET = env.str("CDEK_CLIENT_SECRET", default="RmAmgvSgSl1yirlz9QupbzOJVqhCxcP5")  # Замените на ваш секрет
 CDEK_API_URL = env.str("CDEK_API_URL", default="https://api.edu.cdek.ru")
+CDEK_FROM_LOCATION_CODE = env.str('CDEK_FROM_LOCATION_CODE', 44)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
