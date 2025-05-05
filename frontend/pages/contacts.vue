@@ -19,7 +19,7 @@
 
       <div class="contacts-content">
         <div class="contact-section personal-info">
-          <h2>Индивидуальный предприниматель</h2>
+          <h2>Самозанятый</h2>
           <p><strong>ФИО:</strong> Черепанов Данила Вячеславович</p>
           <p><strong>Телефон:</strong> <a href="tel:+79222151505" class="contact-link">+7 (922) 215-15-05</a></p>
           <p><strong>Email:</strong> <a href="mailto:wocxod.vshd@yandex.ru"
