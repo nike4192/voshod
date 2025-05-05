@@ -361,16 +361,18 @@
     </div>
   </div>
   <!-- Футер -->
-  <div class="footer">
-    <div class="footer-container">
-      <div class="footer-links">
-        <NuxtLink to="/offer" class="footer-link">Публичная оферта</NuxtLink>
-      </div>
-      <div class="footer-copyright">
-        © 2023 Voshod. Все права защищены.
-      </div>
+<div class="footer">
+  <div class="footer-container">
+    <div class="footer-links">
+      <NuxtLink to="/" class="footer-link">Главная</NuxtLink>
+      <NuxtLink to="/offer" class="footer-link">Публичная оферта</NuxtLink>
+      <NuxtLink to="/contacts" class="footer-link">Контакты</NuxtLink>
+    </div>
+    <div class="footer-copyright">
+      © 2023 Voshod. Все права защищены.
     </div>
   </div>
+</div>
   </div>
 </template>
 
@@ -1778,6 +1780,8 @@ onMounted(async () => {
 
 .footer-links {
   margin-bottom: 1rem;
+  display: flex;
+  gap: 1.5rem;
 }
 
 .footer-link {
@@ -1822,5 +1826,12 @@ onMounted(async () => {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+}
+@media (max-width: 768px) {
+  .footer-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
 }
 </style>

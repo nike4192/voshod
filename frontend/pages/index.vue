@@ -47,7 +47,9 @@
     <div class="footer">
       <div class="footer-container">
         <div class="footer-links">
+          <NuxtLink to="/" class="footer-link">Главная</NuxtLink>
           <NuxtLink to="/offer" class="footer-link">Публичная оферта</NuxtLink>
+          <NuxtLink to="/contacts" class="footer-link">Контакты</NuxtLink>
         </div>
         <div class="footer-copyright">
           © 2023 Voshod. Все права защищены.
@@ -276,7 +278,10 @@ body.index-page-active {
 
 .footer-links {
   margin-bottom: 1rem;
+  display: flex;
+  gap: 1.5rem;
 }
+
 
 .footer-link {
   color: var(--text-color);
@@ -298,6 +303,13 @@ body.index-page-active {
 @media (max-width: 768px) {
   .footer-container {
     padding: 1.5rem 1rem;
+  }
+}
+@media (max-width: 768px) {
+  .footer-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
   }
 }
 </style>
