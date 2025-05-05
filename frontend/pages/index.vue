@@ -43,7 +43,18 @@
         </div>
       </div>
     </div>
-  </div>|
+    <!-- Футер -->
+    <div class="footer">
+      <div class="footer-container">
+        <div class="footer-links">
+          <NuxtLink to="/offer" class="footer-link">Публичная оферта</NuxtLink>
+        </div>
+        <div class="footer-copyright">
+          © 2023 Voshod. Все права защищены.
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 </template>
 
@@ -244,6 +255,49 @@ body.index-page-active {
 
   .header-container {
     padding: 1rem;
+  }
+}
+/* Стили для футера */
+.footer {
+  width: 100%;
+  background-color: var(--surface-section);
+  border-top: 1px solid var(--surface-border);
+  margin-top: 2rem;
+}
+
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.footer-links {
+  margin-bottom: 1rem;
+}
+
+.footer-link {
+  color: var(--text-color);
+  text-decoration: none;
+  transition: color 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.footer-link:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.footer-copyright {
+  color: var(--text-color-secondary);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .footer-container {
+    padding: 1.5rem 1rem;
   }
 }
 </style>

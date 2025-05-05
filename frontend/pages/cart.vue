@@ -1,365 +1,391 @@
 <template>
-  <div class="flex justify-content-between flex-wrap">
+  <!-- Шапка на всю ширину -->
+
+  <div class="cart-page">
+  <div class="header-full-width">
+    <div class="header-container">
+      <NuxtLink to="/" class="brand-link">
+        <h1 class="brand-name">Voshod</h1>
+      </NuxtLink>
+      <div class="header-buttons">
+        <Button @click="home" class="p-button-primary home-button" icon="pi pi-home" tooltip="На главную"
+                tooltipOptions="{position: 'bottom'}"/>
+      </div>
+    </div>
+  </div>
+  <div class="content-container">
     <h1>{{ currentStep === 'cart' ? 'Товары в корзине' : 'Оформление заказа' }}</h1>
-    <Button @click="home" style="width:50px; height:50px;" icon="pi pi-home"></Button>
-  </div>
     <div class="cart-page-wrapper">
-  <div style="max-width:1400px;" class="m-auto">
-    <!-- Индикатор шагов -->
-    <div class="steps-container mb-4">
-      <div class="step"
-           :class="{ 'active': currentStep === 'cart' }"
-           @click="goToCart">
-        <span class="step-number">1</span>
-        <span class="step-text">Корзина</span>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step"
-           :class="{ 'active': currentStep === 'delivery' }"
-           @click="goToDelivery">
-        <span class="step-number">2</span>
-        <span class="step-text">Доставка</span>
-      </div>
-      <div class="step-connector"></div>
-      <div class="step"
-           :class="{ 'active': currentStep === 'confirmation' }"
-           @click="goToConfirmation">
-        <span class="step-number">3</span>
-        <span class="step-text">Подтверждение</span>
-      </div>
-    </div>
-    <!-- Сообщения об ошибках или успешной оплате -->
-    <div v-if="cartStore.paymentStatus === 'success'" class="payment-success">
-      <h3>{{ cartStore.paymentMessage }}</h3>
-      <p>Спасибо за ваш заказ!</p>
-      <Button @click="home" label="Вернуться на главную" class="mt-3"/>
-    </div>
-    <div v-else-if="cartStore.paymentStatus === 'error'" class="payment-error">
-      <h3>{{ cartStore.paymentMessage }}</h3>
-      <div v-if="cartStore.insufficientItems && cartStore.insufficientItems.length > 0" class="mt-3">
-        <h4>Недостаточно товаров на складе:</h4>
-        <ul>
-          <li v-for="insufficientItem in cartStore.insufficientItems" :key="insufficientItem.id">
-            {{ insufficientItem.name }} - запрошено: {{ insufficientItem.requested }}, доступно: {{ insufficientItem.available }}
-          </li>
-        </ul>
-      </div>
-      <Button @click="currentStep = 'cart'" label="Вернуться к корзине" class="mt-3"/>
-    </div>
-    <div v-else>
-      <div v-if="cartStore.loading">
-        <ProgressSpinner/>
-        <p>Загрузка...</p>
-      </div>
-      <div v-else-if="cartStore.cartProducts.length === 0">
-        <div class="empty-cart">
-          <i class="pi pi-shopping-cart empty-cart-icon"></i>
-          <h2>Корзина пуста</h2>
-          <p>Добавьте товары в корзину, чтобы продолжить покупки</p>
-          <Button @click="home" label="Перейти к товарам" class="mt-3"/>
+      <div style="max-width:1400px;" class="m-auto">
+        <!-- Индикатор шагов -->
+        <div class="steps-container mb-4">
+          <div class="step"
+               :class="{ 'active': currentStep === 'cart' }"
+               @click="goToCart">
+            <span class="step-number">1</span>
+            <span class="step-text">Корзина</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step"
+               :class="{ 'active': currentStep === 'delivery' }"
+               @click="goToDelivery">
+            <span class="step-number">2</span>
+            <span class="step-text">Доставка</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step"
+               :class="{ 'active': currentStep === 'confirmation' }"
+               @click="goToConfirmation">
+            <span class="step-number">3</span>
+            <span class="step-text">Подтверждение</span>
+          </div>
         </div>
-      </div>
-      <div v-else>
-        <!-- Шаг 1: Корзина -->
-        <div v-if="currentStep === 'cart'" class="cart-step">
-          <div class="flex flex-column lg:flex-row">
-            <div class="cart-items lg:w-8 pr-0 lg:pr-3">
-              <div v-for="item in cartStore.cartProducts" :key="item.id"
-                   class="flex flex-row flex-wrap cart-item border-round-lg w-full align-items-center mb-3">
+        <!-- Сообщения об ошибках или успешной оплате -->
+        <div v-if="cartStore.paymentStatus === 'success'" class="payment-success">
+          <h3>{{ cartStore.paymentMessage }}</h3>
+          <p>Спасибо за ваш заказ!</p>
+          <Button @click="home" label="Вернуться на главную" class="mt-3"/>
+        </div>
+        <div v-else-if="cartStore.paymentStatus === 'error'" class="payment-error">
+          <h3>{{ cartStore.paymentMessage }}</h3>
+          <div v-if="cartStore.insufficientItems && cartStore.insufficientItems.length > 0" class="mt-3">
+            <h4>Недостаточно товаров на складе:</h4>
+            <ul>
+              <li v-for="insufficientItem in cartStore.insufficientItems" :key="insufficientItem.id">
+                {{ insufficientItem.name }} - запрошено: {{ insufficientItem.requested }}, доступно:
+                {{ insufficientItem.available }}
+              </li>
+            </ul>
+          </div>
+          <Button @click="currentStep = 'cart'" label="Вернуться к корзине" class="mt-3"/>
+        </div>
+        <div v-else>
+          <div v-if="cartStore.loading">
+            <ProgressSpinner/>
+            <p>Загрузка...</p>
+          </div>
+          <div v-else-if="cartStore.cartProducts.length === 0">
+            <div class="empty-cart">
+              <i class="pi pi-shopping-cart empty-cart-icon"></i>
+              <h2>Корзина пуста</h2>
+              <p>Добавьте товары в корзину, чтобы продолжить покупки</p>
+              <Button @click="home" label="Перейти к товарам" class="mt-3"/>
+            </div>
+          </div>
+          <div v-else>
+            <!-- Шаг 1: Корзина -->
+            <div v-if="currentStep === 'cart'" class="cart-step">
+              <div class="flex flex-column lg:flex-row">
+                <div class="cart-items lg:w-8 pr-0 lg:pr-3">
+                  <div v-for="item in cartStore.cartProducts" :key="item.id"
+                       class="flex flex-row flex-wrap cart-item border-round-lg w-full align-items-center mb-3">
 
-                <div class="cart-item-image mr-3">
-                  <img
-                      v-if="item.image_url"
-                      :src="item.image_url"
-                      :alt="item.name"
-                      class="product-image"
-                  />
-                  <div v-else class="image-placeholder">Нет изображения</div>
-                </div>
+                    <div class="cart-item-image mr-3">
+                      <img
+                          v-if="item.image_url"
+                          :src="item.image_url"
+                          :alt="item.name"
+                          class="product-image"
+                      />
+                      <div v-else class="image-placeholder">Нет изображения</div>
+                    </div>
 
-                <div class="cart-item-details flex-grow-1">
-                  <h3 class="m-0 mb-2">{{ item.name }}</h3>
-                  <p class="m-0 mb-1">Цена: {{ item.price }} ₽</p>
-                  <p class="m-0">Количество: {{ item.quantity }}</p>
+                    <div class="cart-item-details flex-grow-1">
+                      <h3 class="m-0 mb-2">{{ item.name }}</h3>
+                      <p class="m-0 mb-1">Цена: {{ item.price }} ₽</p>
+                      <p class="m-0">Количество: {{ item.quantity }}</p>
+                    </div>
+                    <Button
+                        @click="removeItem(item.id)"
+                        class="p-button-danger p-button-sm"
+                        icon="pi pi-trash"
+                        :disabled="cartStore.loading"
+                    ></Button>
+                  </div>
                 </div>
-                <Button
-                    @click="removeItem(item.id)"
-                    class="p-button-danger p-button-sm"
-                    icon="pi pi-trash"
-                    :disabled="cartStore.loading"
-                ></Button>
+                <div class="cart-summary lg:w-4 mt-3 lg:mt-0" style="color:black">
+                  <div class="p-4 border-round-lg summary-box">
+                    <h3>Итого:</h3>
+                    <div class="summary-row">
+                      <span>Товары ({{ cartStore.totalQuantity }} шт.):</span>
+                      <span>{{ cartStore.totalPrice }} ₽</span>
+                    </div>
+                    <div class="summary-row total">
+                      <span>К оплате:</span>
+                      <span>{{ cartStore.totalPrice }} ₽</span>
+                    </div>
+                    <Button
+                        @click="goToDelivery"
+                        label="Далее"
+                        class="w-full mt-3"
+                        :disabled="cartStore.loading"
+                    ></Button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="cart-summary lg:w-4 mt-3 lg:mt-0" style="color:black">
-              <div class="p-4 border-round-lg summary-box">
-                <h3>Итого:</h3>
-                <div class="summary-row">
-                  <span>Товары ({{ cartStore.totalQuantity }} шт.):</span>
-                  <span>{{ cartStore.totalPrice }} ₽</span>
-                </div>
-                <div class="summary-row total">
-                  <span>К оплате:</span>
-                  <span>{{ cartStore.totalPrice }} ₽</span>
-                </div>
-                <Button
-                    @click="goToDelivery"
-                    label="Далее"
-                    class="w-full mt-3"
-                    :disabled="cartStore.loading"
-                ></Button>
+            <!-- Шаг 2: Форма доставки -->
+            <div v-if="currentStep === 'delivery'" class="delivery-step">
+              <h2>Информация о доставке</h2>
+              <div class="p-fluid">
+                <form @submit.prevent="goToConfirmation">
+                  <div class="p-grid">
+                    <div class="delivery-method-selection mb-4">
+                      <h3>Выберите способ доставки</h3>
+
+                      <div class="delivery-options">
+                        <div class="delivery-option">
+                          <RadioButton
+                              v-model="customerData.delivery_method"
+                              inputId="pochta"
+                              name="delivery_method"
+                              value="pochta_russia"
+                              @change="handleDeliveryMethodChange"
+                          />
+                          <label for="pochta" class="delivery-label">
+                            <img src="@/assets/Pochta_Russia.png" alt="Почта России" class="delivery-logo"/>
+                            <span>Почта России</span>
+                          </label>
+                        </div>
+
+                        <div class="delivery-option">
+                          <RadioButton
+                              v-model="customerData.delivery_method"
+                              inputId="cdek"
+                              name="delivery_method"
+                              value="cdek"
+                              @change="handleDeliveryMethodChange"
+                          />
+                          <label for="cdek" class="delivery-label">
+                            <img src="@/assets/CDEK.png" alt="СДЭК" class="delivery-logo"/>
+                            <span>СДЭК</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="p-col-12 p-md-6">
+                      <div class="p-field">
+                        <label for="customer_name">Ваше имя</label>
+                        <InputText
+                            id="customer_name"
+                            v-model="customerData.customer_name"
+                            class="w-full"
+                            :class="{ 'p-invalid': v$.customer_name.$invalid && v$.customer_name.$dirty }"
+                        />
+                        <small v-if="v$.customer_name.$invalid && v$.customer_name.$dirty" class="p-error">
+                          {{ v$.customer_name.$errors[0].$message }}
+                        </small>
+                      </div>
+                    </div>
+                    <div class="p-col-12 p-md-6">
+                      <div class="p-field">
+                        <label for="customer_email">Email</label>
+                        <InputText
+                            id="customer_email"
+                            v-model="customerData.customer_email"
+                            class="w-full"
+                            :class="{ 'p-invalid': v$.customer_email.$invalid && v$.customer_email.$dirty }"
+                        />
+                        <small v-if="v$.customer_email.$invalid && v$.customer_email.$dirty" class="p-error">
+                          {{ v$.customer_email.$errors[0].$message }}
+                        </small>
+                      </div>
+                    </div>
+                    <div class="p-col-12 p-md-6">
+                      <div class="p-field">
+                        <label for="customer_phone">Телефон</label>
+                        <InputText
+                            id="customer_phone"
+                            v-model="customerData.customer_phone"
+                            class="w-full"
+                            :class="{ 'p-invalid': v$.customer_phone.$invalid && v$.customer_phone.$dirty }"
+                        />
+                        <small v-if="v$.customer_phone.$invalid && v$.customer_phone.$dirty" class="p-error">
+                          {{ v$.customer_phone.$errors[0].$message }}
+                        </small>
+                      </div>
+                    </div>
+                    <div v-if="!isCdekDelivery" class="field mb-4 address-field">
+                      <label for="delivery_address" class="block mb-2">Адрес доставки</label>
+                      <AddressNormalizer
+                          v-model="customerData.delivery_address"
+                          @address-normalized="handleAddressNormalized"
+                          :error="v$.delivery_address.$error"
+                      />
+                    </div>
+
+                    <!-- Поля для CDEK -->
+
+                    <div v-if="customerData.delivery_method === 'cdek'">
+                      <div class="p-col-12 p-md-6 pole">
+                        <div class="p-field">
+                          <label for="delivery_city">Город</label>
+                          <CdekCitySelector
+                              v-model="customerData.delivery_city"
+                              :error="v$.delivery_city.$error"
+                              @city-selected="handleCdekCitySelected"
+                          />
+                          <small v-if="v$.delivery_city.$error" class="p-error">
+                            {{ v$.delivery_city.$errors[0].$message }}
+                          </small>
+                        </div>
+                      </div>
+                      <div class="p-col-12 p-md-6 pole">
+                        <div class="p-field">
+                          <label for="delivery_pickup_point">Пункт выдачи</label>
+                          <CdekPickupPointSelector
+                              v-model="customerData.delivery_pickup_point"
+                              :city-code="selectedCdekCityCode"
+                              :error="v$.delivery_pickup_point.$error"
+                              @pickup-point-selected="handleCdekPickupPointSelected"
+                          />
+                          <small v-if="v$.delivery_pickup_point.$error" class="p-error">
+                            {{ v$.delivery_pickup_point.$errors[0].$message }}
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="p-col-12" style="margin-top: 20px">
+                      <div class="p-field">
+                        <label for="delivery_comment">Комментарий к доставке (необязательно)</label>
+                        <Textarea
+                            id="delivery_comment"
+                            v-model="customerData.delivery_comment"
+                            class="w-full"
+                            rows="3"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex justify-content-between mt-4">
+                    <Button label="Назад к корзине" @click="goToCart" outlined/>
+                    <Button
+                        label="Продолжить"
+                        @click="goToConfirmation"
+                        class="p-button-primary"
+                    />
+                  </div>
+                </form>
               </div>
             </div>
           </div>
         </div>
-        <!-- Шаг 2: Форма доставки -->
-        <div v-if="currentStep === 'delivery'" class="delivery-step">
-          <h2>Информация о доставке</h2>
-          <div class="p-fluid">
-            <form @submit.prevent="goToConfirmation">
-              <div class="p-grid">
-                <div class="delivery-method-selection mb-4">
-                  <h3>Выберите способ доставки</h3>
-
-                  <div class="delivery-options">
-                    <div class="delivery-option">
-                      <RadioButton
-                          v-model="customerData.delivery_method"
-                          inputId="pochta"
-                          name="delivery_method"
-                          value="pochta_russia"
-                          @change="handleDeliveryMethodChange"
-                      />
-                      <label for="pochta" class="delivery-label">
-                        <img src="@/assets/Pochta_Russia.png" alt="Почта России" class="delivery-logo"/>
-                        <span>Почта России</span>
-                      </label>
-                    </div>
-
-                    <div class="delivery-option">
-                      <RadioButton
-                          v-model="customerData.delivery_method"
-                          inputId="cdek"
-                          name="delivery_method"
-                          value="cdek"
-                          @change="handleDeliveryMethodChange"
-                      />
-                      <label for="cdek" class="delivery-label">
-                        <img src="@/assets/CDEK.png" alt="СДЭК" class="delivery-logo"/>
-                        <span>СДЭК</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                <div class="p-col-12 p-md-6">
-                  <div class="p-field">
-                    <label for="customer_name">Ваше имя</label>
-                    <InputText
-                      id="customer_name"
-                      v-model="customerData.customer_name"
-                      class="w-full"
-                      :class="{ 'p-invalid': v$.customer_name.$invalid && v$.customer_name.$dirty }"
-                    />
-                    <small v-if="v$.customer_name.$invalid && v$.customer_name.$dirty" class="p-error">
-                      {{ v$.customer_name.$errors[0].$message }}
-                    </small>
-                  </div>
-                </div>
-                <div class="p-col-12 p-md-6">
-                  <div class="p-field">
-                    <label for="customer_email">Email</label>
-                    <InputText
-                        id="customer_email"
-                        v-model="customerData.customer_email"
-                        class="w-full"
-                        :class="{ 'p-invalid': v$.customer_email.$invalid && v$.customer_email.$dirty }"
-                    />
-                    <small v-if="v$.customer_email.$invalid && v$.customer_email.$dirty" class="p-error">
-                      {{ v$.customer_email.$errors[0].$message }}
-                    </small>
-                  </div>
-                </div>
-                <div class="p-col-12 p-md-6">
-                  <div class="p-field">
-                    <label for="customer_phone">Телефон</label>
-                    <InputText
-                        id="customer_phone"
-                        v-model="customerData.customer_phone"
-                        class="w-full"
-                        :class="{ 'p-invalid': v$.customer_phone.$invalid && v$.customer_phone.$dirty }"
-                    />
-                    <small v-if="v$.customer_phone.$invalid && v$.customer_phone.$dirty" class="p-error">
-                      {{ v$.customer_phone.$errors[0].$message }}
-                    </small>
-                  </div>
-                </div>
-                <div v-if="!isCdekDelivery" class="field mb-4 address-field">
-                  <label for="delivery_address" class="block mb-2">Адрес доставки</label>
-                  <AddressNormalizer
-                      v-model="customerData.delivery_address"
-                      @address-normalized="handleAddressNormalized"
-                      :error="v$.delivery_address.$error"
-                  />
-                </div>
-
-                <!-- Поля для CDEK -->
-
-                <div v-if="customerData.delivery_method === 'cdek'">
-                <div class="p-col-12 p-md-6 pole">
-                  <div class="p-field">
-                    <label for="delivery_city" >Город</label>
-                    <CdekCitySelector
-                        v-model="customerData.delivery_city"
-                        :error="v$.delivery_city.$error"
-                        @city-selected="handleCdekCitySelected"
-                    />
-                    <small v-if="v$.delivery_city.$error" class="p-error">
-                      {{ v$.delivery_city.$errors[0].$message }}
-                    </small>
-                  </div>
-                </div>
-                <div class="p-col-12 p-md-6 pole">
-                  <div class="p-field">
-                    <label for="delivery_pickup_point" >Пункт выдачи</label>
-                    <CdekPickupPointSelector
-                        v-model="customerData.delivery_pickup_point"
-                        :city-code="selectedCdekCityCode"
-                        :error="v$.delivery_pickup_point.$error"
-                        @pickup-point-selected="handleCdekPickupPointSelected"
-                    />
-                    <small v-if="v$.delivery_pickup_point.$error" class="p-error">
-                      {{ v$.delivery_pickup_point.$errors[0].$message }}
-                    </small>
-                  </div>
-                </div>
-                  </div>
-                <div class="p-col-12" style="margin-top: 20px">
-                  <div class="p-field">
-                    <label for="delivery_comment">Комментарий к доставке (необязательно)</label>
-                    <Textarea
-                        id="delivery_comment"
-                        v-model="customerData.delivery_comment"
-                         class="w-full"
-                        rows="3"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div class="flex justify-content-between mt-4">
-                <Button label="Назад к корзине" @click="goToCart" outlined />
-                <Button
-                  label="Продолжить"
-                  @click="goToConfirmation"
-                  class="p-button-primary"
-                />
-              </div>
-            </form>
-          </div>
-        </div>
       </div>
-  </div>
-  </div>
-  <!-- Шаг 3: Подтверждение -->
-  <div v-if="currentStep === 'confirmation'">
-      <h2>Подтверждение заказа</h2>
+      <!-- Шаг 3: Подтверждение -->
+      <div v-if="currentStep === 'confirmation'">
+        <h2>Подтверждение заказа</h2>
 
-      <!-- Сводка заказа -->
-      <div class="order-summary p-4 mb-4 summary-box">
-        <h3>Ваш заказ</h3>
+        <!-- Сводка заказа -->
+        <div class="order-summary p-4 mb-4 summary-box">
+          <h3>Ваш заказ</h3>
 
-        <!-- Список товаров -->
-<div v-for="product in cartStore.cartProducts" :key="product.id" class="mb-2 d-flex justify-content-between">
-  <span>{{ product.name || 'Товар' }} x {{ product.quantity || 1 }}</span>&nbsp;
-  <span>
+          <!-- Список товаров -->
+          <div v-for="product in cartStore.cartProducts" :key="product.id" class="mb-2 d-flex justify-content-between">
+            <span>{{ product.name || 'Товар' }} x {{ product.quantity || 1 }}</span>&nbsp;
+            <span>
     {{ calculateProductTotal(product) }} ₽
   </span>
-</div>
+          </div>
 
-        <hr />
+          <hr/>
 
-        <div class="d-flex justify-content-between mb-2 align-items-center">
-          <span>Стоимость доставки:</span>
-          <div class="d-flex align-items-center">
-            <span class="mr-2">{{ cartStore.shippingCost.toFixed(2) }} ₽</span>
-            <ProgressSpinner v-if="cartStore.shippingLoading" style="width:20px;height:20px" class="ml-2"/>
+          <div class="d-flex justify-content-between mb-2 align-items-center">
+            <span>Стоимость доставки:</span>
+            <div class="d-flex align-items-center">
+              <span class="mr-2">{{ cartStore.shippingCost.toFixed(2) }} ₽</span>
+              <ProgressSpinner v-if="cartStore.shippingLoading" style="width:20px;height:20px" class="ml-2"/>
+            </div>
+          </div>
+
+          <!-- Сообщение об ошибке и кнопка пересчета -->
+          <div v-if="cartStore.shippingError" class="shipping-error-container mb-3">
+            <div class="shipping-error-message">
+              <i class="pi pi-exclamation-triangle mr-2" style="color: #dc3545;"></i>
+              <span>{{ cartStore.shippingError }}</span>
+            </div>
+            <Button
+                label="Пересчитать"
+                @click="recalculateShipping"
+                class="p-button-sm p-button-outlined p-button-danger"
+                :loading="cartStore.shippingLoading"
+                :disabled="cartStore.shippingLoading"
+            />
+          </div>
+
+          <hr/>
+
+          <!-- Итоговая сумма с доставкой -->
+          <div class="d-flex justify-content-between font-weight-bold">
+            <span>Итого к оплате:</span>
+            <span>{{ cartStore.totalWithShipping.toFixed(2) }} ₽</span>
           </div>
         </div>
+        <!-- Данные покупателя -->
+        <div class="customer-info p-4 mb-4 summary-box">
+          <h3>Данные получателя</h3>
+          <p><strong>Имя:</strong> {{ customerData.customer_name }}</p>
+          <p><strong>Email:</strong> {{ customerData.customer_email }}</p>
+          <p><strong>Телефон:</strong> {{ customerData.customer_phone }}</p>
 
-        <!-- Сообщение об ошибке и кнопка пересчета -->
-        <div v-if="cartStore.shippingError" class="shipping-error-container mb-3">
-          <div class="shipping-error-message">
-            <i class="pi pi-exclamation-triangle mr-2" style="color: #dc3545;"></i>
-            <span>{{ cartStore.shippingError }}</span>
-          </div>
+          <!-- Способ доставки -->
+          <p><strong>Способ доставки:</strong>
+            <span v-if="customerData.delivery_method === 'pochta_russia'">Почта России</span>
+            <span v-else-if="customerData.delivery_method === 'cdek'">СДЭК</span>
+          </p>
+
+          <!-- Информация о доставке в зависимости от метода -->
+          <template v-if="customerData.delivery_method === 'pochta_russia'">
+            <p><strong>Адрес доставки:</strong> {{ customerData.delivery_address }}</p>
+          </template>
+
+          <template v-else-if="customerData.delivery_method === 'cdek'">
+            <p><strong>Город:</strong> {{ cdekCityDisplay }}</p>
+            <p><strong>Пункт выдачи:</strong> {{ cdekPickupPointDisplay }}</p>
+          </template>
+
+          <p v-if="customerData.delivery_comment"><strong>Комментарий:</strong> {{ customerData.delivery_comment }}</p>
+        </div>
+
+        <!-- Кнопки управления -->
+        <div class="d-flex justify-content-between mt-4">
+          <Button label="Назад" @click="goToDelivery" class="p-button-secondary"/>
           <Button
-              label="Пересчитать"
-              @click="recalculateShipping"
-              class="p-button-sm p-button-outlined p-button-danger"
-              :loading="cartStore.shippingLoading"
-              :disabled="cartStore.shippingLoading"
+              label="Оплатить"
+              @click="processPayment"
+              :loading="cartStore.loading"
+              :disabled="cartStore.loading || cartStore.shippingLoading || cartStore.shippingError"
+              class="p-button-success"
           />
         </div>
-
-        <hr />
-
-        <!-- Итоговая сумма с доставкой -->
-        <div class="d-flex justify-content-between font-weight-bold">
-          <span>Итого к оплате:</span>
-          <span>{{ cartStore.totalWithShipping.toFixed(2) }} ₽</span>
-        </div>
-      </div>
-    <!-- Данные покупателя -->
-    <div class="customer-info p-4 mb-4 summary-box">
-      <h3>Данные получателя</h3>
-      <p><strong>Имя:</strong> {{ customerData.customer_name }}</p>
-      <p><strong>Email:</strong> {{ customerData.customer_email }}</p>
-      <p><strong>Телефон:</strong> {{ customerData.customer_phone }}</p>
-
-      <!-- Способ доставки -->
-      <p><strong>Способ доставки:</strong>
-        <span v-if="customerData.delivery_method === 'pochta_russia'">Почта России</span>
-        <span v-else-if="customerData.delivery_method === 'cdek'">СДЭК</span>
-      </p>
-
-      <!-- Информация о доставке в зависимости от метода -->
-      <template v-if="customerData.delivery_method === 'pochta_russia'">
-        <p><strong>Адрес доставки:</strong> {{ customerData.delivery_address }}</p>
-      </template>
-
-      <template v-else-if="customerData.delivery_method === 'cdek'">
-        <p><strong>Город:</strong> {{ cdekCityDisplay }}</p>
-        <p><strong>Пункт выдачи:</strong> {{ cdekPickupPointDisplay }}</p>
-      </template>
-
-      <p v-if="customerData.delivery_comment"><strong>Комментарий:</strong> {{ customerData.delivery_comment }}</p>
-    </div>
-
-      <!-- Кнопки управления -->
-      <div class="d-flex justify-content-between mt-4">
-        <Button label="Назад" @click="goToDelivery" class="p-button-secondary" />
-        <Button
-          label="Оплатить"
-          @click="processPayment"
-          :loading="cartStore.loading"
-          :disabled="cartStore.loading || cartStore.shippingLoading || cartStore.shippingError"
-          class="p-button-success"
-        />
       </div>
     </div>
-</div>
+  </div>
+  <!-- Футер -->
+  <div class="footer">
+    <div class="footer-container">
+      <div class="footer-links">
+        <NuxtLink to="/offer" class="footer-link">Публичная оферта</NuxtLink>
+      </div>
+      <div class="footer-copyright">
+        © 2023 Voshod. Все права защищены.
+      </div>
+    </div>
+  </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
-import { useCart } from '~/composables/useCart.js';
-import { useVuelidate } from '@vuelidate/core';
-import { required, email, helpers } from '@vuelidate/validators';
+import {ref, computed, onMounted, watch} from 'vue';
+import {useCart} from '~/composables/useCart.js';
+import {useVuelidate} from '@vuelidate/core';
+import {required, email, helpers} from '@vuelidate/validators';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Button from 'primevue/button';
 import ProgressSpinner from 'primevue/progressspinner';
 import AddressNormalizer from '~/components/AddressNormalizer.vue';
-import { useRouter } from 'vue-router';
-import { useToast } from 'primevue/usetoast';
+import {useRouter} from 'vue-router';
+import {useToast} from 'primevue/usetoast';
 import CdekCitySelector from '~/components/CdekCitySelector.vue';
 import CdekPickupPointSelector from '~/components/CdekPickupPointSelector.vue';
 
@@ -391,25 +417,25 @@ const isCdekDelivery = computed(() => {
 // Правила валидации
 const rules = computed(() => {
   const baseRules = {
-    customer_name: { required: helpers.withMessage('Введите ваше имя', required) },
+    customer_name: {required: helpers.withMessage('Введите ваше имя', required)},
     customer_email: {
       required: helpers.withMessage('Введите email', required),
       email: helpers.withMessage('Введите корректный email', email)
     },
-    customer_phone: { required: helpers.withMessage('Введите номер телефона', required) }
+    customer_phone: {required: helpers.withMessage('Введите номер телефона', required)}
   };
 
   // Добавляем правила в зависимости от метода доставки
   if (customerData.value.delivery_method === 'cdek') {
     return {
       ...baseRules,
-      delivery_city: { required: helpers.withMessage('', required) },
-      delivery_pickup_point: { required: helpers.withMessage('', required) }
+      delivery_city: {required: helpers.withMessage('', required)},
+      delivery_pickup_point: {required: helpers.withMessage('', required)}
     };
   } else {
     return {
       ...baseRules,
-      delivery_address: { required: helpers.withMessage('', required) }
+      delivery_address: {required: helpers.withMessage('', required)}
     };
   }
 });
@@ -475,6 +501,7 @@ function handleCdekPickupPointSelected(point) {
     }
   }
 }
+
 // Ссылка на компонент AddressNormalizer
 const addressNormalizerRef = ref(null);
 
@@ -603,6 +630,7 @@ const cdekPickupPointDisplay = computed(() => {
 
   return '';
 });
+
 // Функция для перехода к шагу "Подтверждение"
 async function goToConfirmation() {
   try {
@@ -758,7 +786,7 @@ async function goToConfirmation() {
     currentStep.value = 'confirmation';
 
     // Прокручиваем страницу вверх для лучшего пользовательского опыта
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({top: 0, behavior: 'smooth'});
 
   } catch (error) {
     console.error('Ошибка при переходе к подтверждению:', error);
@@ -770,8 +798,6 @@ async function goToConfirmation() {
     });
   }
 }// Возврат к шагу доставки
-
-
 
 
 // Вычисляемое свойство для форматированного адреса доставки
@@ -1067,7 +1093,7 @@ watch(() => cartStore.cartProducts, (newValue) => {
       life: 3000
     });
   }
-}, { deep: true });
+}, {deep: true});
 
 // Отслеживаем изменения метода доставки для сброса валидации
 watch(() => customerData.value.delivery_method, () => {
@@ -1118,8 +1144,8 @@ onMounted(async () => {
   height: 80px;
   object-fit: cover;
   border-radius: 4px;
-  position: relative;     /* Добавить относительное позиционирование */
-  z-index: 1;             /* Убедиться, что изображение находится поверх других элементов */
+  position: relative; /* Добавить относительное позиционирование */
+  z-index: 1; /* Убедиться, что изображение находится поверх других элементов */
 }
 
 .image-placeholder {
@@ -1299,11 +1325,11 @@ onMounted(async () => {
   height: 80px;
   margin-right: 15px;
   border-radius: 4px;
-  display: flex;          /* Изменить на flex */
+  display: flex; /* Изменить на flex */
   justify-content: center; /* Центрирование по горизонтали */
-  align-items: center;     /* Центрирование по вертикали */
-  overflow: hidden;        /* Обрезать выходящее за границы содержимое */
-  position: relative;      /* Для абсолютного позиционирования внутренних элементов */
+  align-items: center; /* Центрирование по вертикали */
+  overflow: hidden; /* Обрезать выходящее за границы содержимое */
+  position: relative; /* Для абсолютного позиционирования внутренних элементов */
 }
 
 .cart-item-details {
@@ -1436,6 +1462,7 @@ onMounted(async () => {
 [v-if="currentStep === 'confirmation'"] .navigation-buttons {
   margin-top: 20px;
 }
+
 .shipping-error-container {
   background-color: rgba(220, 53, 69, 0.1);
   border-left: 3px solid #dc3545;
@@ -1462,6 +1489,7 @@ onMounted(async () => {
   color: #000 !important;
   font-size: 0.9rem;
 }
+
 .cart-page-wrapper {
   width: 100%;
   overflow: hidden;
@@ -1469,6 +1497,7 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
 }
+
 .delivery-options {
   display: flex;
   gap: 20px;
@@ -1634,6 +1663,7 @@ onMounted(async () => {
     margin-bottom: 5px;
   }
 }
+
 /* Стили для кнопок выбора способа доставки */
 .delivery-option {
   display: flex;
@@ -1675,9 +1705,122 @@ onMounted(async () => {
     height: 56px; /* Сохраняем ту же высоту на мобильных */
   }
 }
-.pole{
+
+.pole {
   margin-top: 8px
 }
 
+/* Стили для хедера */
+.header-full-width {
+  width: 100%;
+  background-color: var(--surface-section);
+  border-bottom: 1px solid var(--surface-border);
+}
 
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.brand-name {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-color);
+  margin: 0;
+}
+
+.brand-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Контейнер для кнопок в хедере */
+.header-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Стиль для кнопок */
+.home-button,
+.cart-button {
+  width: 3rem !important;
+  height: 3rem !important;
+  font-size: 1.2rem !important;
+}
+
+/* Контейнер для контента */
+.content-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* Стили для футера */
+.footer {
+  width: 100%;
+  background-color: var(--surface-section);
+  border-top: 1px solid var(--surface-border);
+  margin-top: 2rem;
+}
+
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.footer-links {
+  margin-bottom: 1rem;
+}
+
+.footer-link {
+  color: var(--text-color);
+  text-decoration: none;
+  transition: color 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.footer-link:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.footer-copyright {
+  color: var(--text-color-secondary);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .header-container {
+    padding: 1rem;
+  }
+
+  .brand-name {
+    font-size: 2rem;
+  }
+
+  .footer-container {
+    padding: 1.5rem 1rem;
+  }
+}
+/* Сброс отступов для страницы корзины */
+.cart-page {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+/* Применяем стили к body только когда активна страница корзины */
+:global(body) {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
 </style>
