@@ -403,67 +403,172 @@ const calculateCdekShipping = async () => {
   };
 
   // Обработка оплаты
-  const processPayment = async (customerData) => {
-    loading.value = true;
-    error.value = null;
-    paymentStatus.value = '';
-    paymentMessage.value = '';
-    insufficientItems.value = [];
+const processPayment = async (customerData) => {
+  loading.value = true;
+  error.value = null;
+  paymentStatus.value = '';
+  paymentMessage.value = '';
+  insufficientItems.value = [];
 
-    try {
-      // Если стоимость доставки еще не рассчитана, пробуем рассчитать
-      if (shippingCost.value === 0 && deliveryIndex.value) {
-        await calculateShipping();
-      }
+  try {
+    // Если стоимость доставки еще не рассчитана, пробуем рассчитать
+    if (shippingCost.value === 0 && deliveryIndex.value) {
+      await calculateShipping();
+    }
 
-      const response = await axios.post('/api/process_payment/', {
-        ...customerData,
-        shipping_cost: shippingCost.value,
-        delivery_index: deliveryIndex.value,
-        total_with_shipping: totalWithShipping.value,
-        delivery_method: selectedDeliveryMethod.value // Добавляем информацию о способе доставки
-      });
+    const response = await axios.post('/api/process_payment/', {
+      ...customerData,
+      shipping_cost: shippingCost.value,
+      delivery_index: deliveryIndex.value,
+      total_with_shipping: totalWithShipping.value,
+      delivery_method: selectedDeliveryMethod.value
+    });
 
-      // Обработка ответа
-      paymentStatus.value = response.data.status;
-      paymentMessage.value = response.data.message;
+    // Обработка ответа
+    paymentStatus.value = response.data.status;
+    paymentMessage.value = response.data.message;
 
-      if (response.data.insufficient_items) {
-        insufficientItems.value = response.data.insufficient_items;
-      }
+    if (response.data.insufficient_items) {
+      insufficientItems.value = response.data.insufficient_items;
+    }
 
-      if (response.data.status === 'success') {
-        // Очистка корзины после успешной оплаты
-        cartProducts.value = [];
-        totalQuantity.value = 0;
-        totalPrice.value = 0;
-        totalWeight.value = 0;
-        shippingCost.value = 0;
-        deliveryIndex.value = '';
-      }
+    if (response.data.status === 'success') {
+      // Если платеж создан успешно, сохраняем данные о платеже
+      const paymentData = {
+        orderId: response.data.order_id,
+        paymentId: response.data.payment_id,
+        confirmationUrl: response.data.confirmation_url
+      };
 
-      return response.data;
-    } catch (err) {
-      console.error('Ошибка при обработке платежа:', err);
+      // Сохраняем данные о платеже в localStorage для возможности проверки статуса
+      localStorage.setItem('currentPayment', JSON.stringify(paymentData));
 
-      if (err.response && err.response.data) {
-        console.error('Ответ сервера с ошибкой:', err.response.data);
-        paymentMessage.value = err.response.data.message || 'Произошла ошибка при обработке платежа';
-      } else {
-        paymentMessage.value = 'Произошла ошибка при обработке платежа';
-      }
+      // Перенаправляем пользователя на страницу оплаты YooKassa
+      window.location.href = response.data.confirmation_url;
 
-      error.value = err;
-      paymentStatus.value = 'error';
+      // Очистка корзины после успешной оплаты
+      cartProducts.value = [];
+      totalQuantity.value = 0;
+      totalPrice.value = 0;
+      totalWeight.value = 0;
+      shippingCost.value = 0;
+      deliveryIndex.value = '';
 
       return {
-        status: 'error',
-        message: paymentMessage.value
+        status: 'success',
+        message: response.data.message,
+        redirectUrl: response.data.confirmation_url
       };
-    } finally {
-      loading.value = false;
     }
-  };
+
+    return response.data;
+  } catch (err) {
+    console.error('Ошибка при обработке платежа:', err);
+
+    if (err.response && err.response.data) {
+      console.error('Ответ сервера с ошибкой:', err.response.data);
+      paymentMessage.value = err.response.data.message || 'Произошла ошибка при обработке платежа';
+    } else {
+      paymentMessage.value = 'Произошла ошибка при обработке платежа';
+    }
+
+    error.value = err;
+    paymentStatus.value = 'error';
+
+    return {
+      status: 'error',
+      message: paymentMessage.value
+    };
+  } finally {
+    loading.value = false;
+  }
+};
+
+const checkPaymentStatus = async (orderId) => {
+  loading.value = true;
+  error.value = null;
+
+  try {
+    const response = await axios.post('/api/check-payment-status/', {
+      order_id: orderId
+    });
+
+    if (response.data.status === 'success') {
+      const paymentStatus = response.data.payment_status;
+      const orderStatus = response.data.order_status;
+
+      // Обрабатываем различные статусы платежа
+      if (paymentStatus === 'succeeded') {
+        return {
+          status: 'success',
+          paymentStatus: paymentStatus,
+          orderStatus: orderStatus,
+          message: 'Платеж успешно завершен'
+        };
+      } else if (paymentStatus === 'canceled') {
+        return {
+          status: 'error',
+          paymentStatus: paymentStatus,
+          orderStatus: orderStatus,
+          message: 'Платеж отменен'
+        };
+      } else {
+        return {
+          status: 'pending',
+          paymentStatus: paymentStatus,
+          orderStatus: orderStatus,
+          message: 'Платеж в обработке'
+        };
+      }
+    } else {
+      return {
+        status: 'error',
+        message: response.data.message || 'Ошибка при проверке статуса платежа'
+      };
+    }
+  } catch (err) {
+    console.error('Ошибка при проверке статуса платежа:', err);
+
+    error.value = err;
+
+    return {
+      status: 'error',
+      message: err.response?.data?.message || 'Произошла ошибка при проверке статуса платежа'
+    };
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Функция для проверки результата платежа при возврате с YooKassa
+const checkPaymentResult = async () => {
+  // Проверяем, есть ли сохраненные данные о платеже
+  const paymentDataStr = localStorage.getItem('currentPayment');
+  if (!paymentDataStr) {
+    return null;
+  }
+
+  try {
+    // Парсим данные о платеже
+    const paymentData = JSON.parse(paymentDataStr);
+
+    // Проверяем статус платежа
+    const result = await checkPaymentStatus(paymentData.orderId);
+
+    // Если платеж завершен или отменен, удаляем данные из localStorage
+    if (result.status === 'success' || result.status === 'error') {
+      localStorage.removeItem('currentPayment');
+    }
+
+    return result;
+  } catch (err) {
+    console.error('Ошибка при проверке результата платежа:', err);
+    return {
+      status: 'error',
+      message: 'Произошла ошибка при проверке результата платежа'
+    };
+  }
+};
 
   // Функция для нормализации адреса
   const normalizeAddress = async (address) => {
@@ -610,6 +715,8 @@ const calculateCdekShipping = async () => {
     selectedCdekCity,
     setSelectedCdekCity,
     selectedCdekPickupPoint,
-    setSelectedCdekPickupPoint
+    setSelectedCdekPickupPoint,
+    checkPaymentStatus,
+    checkPaymentResult
   };
 });

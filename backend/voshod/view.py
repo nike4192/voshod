@@ -12,6 +12,12 @@ from django.conf import settings
 from rest_framework.decorators import api_view
 from .models import Product, Order, OrderItem
 from .serializers import ProductSerializer
+from .yookassa_api import YooKassaAPI
+from .pochta_api import PochtaAPI
+
+
+
+logger = logging.getLogger(__name__)
 
 
 @require_GET
@@ -138,6 +144,14 @@ def remove_from_cart(request, product_id):
     else:
         return JsonResponse({'status': 'error', 'message': 'Товар не найден в корзине'}, status=404)
 
+
+# views.py - модифицируйте функцию process_payment
+from .yookassa_api import YooKassaAPI
+
+# Инициализируем YooKassaAPI
+yookassa_api = YooKassaAPI()
+
+
 @api_view(['POST'])
 @transaction.atomic
 def process_payment(request):
@@ -217,6 +231,7 @@ def process_payment(request):
         order.save()
 
         # Добавляем товары в заказ
+        insufficient_items = []
         for product_id, item_data in cart.items():
             try:
                 product = Product.objects.get(pk=product_id)
@@ -224,16 +239,13 @@ def process_payment(request):
 
                 # Проверяем наличие товара на складе
                 if product.stock < quantity:
-                    return JsonResponse({
-                        'status': 'error',
-                        'message': f'Недостаточно товара "{product.name}" на складе. Доступно: {product.stock}, запрошено: {quantity}',
-                        'insufficient_items': [{
-                            'id': product.id,
-                            'name': product.name,
-                            'available': product.stock,
-                            'requested': quantity
-                        }]
-                    }, status=400)
+                    insufficient_items.append({
+                        'id': product.id,
+                        'name': product.name,
+                        'available': product.stock,
+                        'requested': quantity
+                    })
+                    continue
 
                 # Создаем элемент заказа
                 OrderItem.objects.create(
@@ -250,23 +262,54 @@ def process_payment(request):
                 logger.warning(f"Product with ID {product_id} not found")
                 continue
 
+        # Если есть товары с недостаточным количеством на складе
+        if insufficient_items:
+            # Удаляем созданный заказ
+            order.delete()
+
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Недостаточно товаров на складе',
+                'insufficient_items': insufficient_items
+            }, status=400)
+
+        # Создаем платеж через YooKassa
+        payment_result = yookassa_api.create_payment(order)
+
+        if payment_result['status'] == 'error':
+            # Если произошла ошибка при создании платежа, удаляем заказ
+            order.delete()
+
+            return JsonResponse({
+                'status': 'error',
+                'message': f"Ошибка при создании платежа: {payment_result['message']}"
+            }, status=500)
+
+        # Сохраняем ID платежа и статус в заказе
+        order.payment_id = payment_result['payment_id']
+        order.payment_status = payment_result['payment_status']
+        order.save()
+
         # Очищаем корзину
         request.session['cart'] = {}
         request.session.modified = True
 
-        # Возвращаем успешный ответ
+        # Возвращаем успешный ответ с URL для оплаты
         return JsonResponse({
             'status': 'success',
             'message': 'Заказ успешно оформлен',
-            'order_id': order.id
+            'order_id': order.id,
+            'payment_id': payment_result['payment_id'],
+            'confirmation_url': payment_result['confirmation_url']
         })
     except Exception as e:
         logger.error(f"Error in process_payment: {str(e)}")
-        logger.error(traceback.format_exc())  # Добавляем полный стек-трейс для отладки
+        logger.error(traceback.format_exc())
         return JsonResponse({
             'status': 'error',
             'message': f'Ошибка при обработке заказа: {str(e)}'
         }, status=500)
+
 @api_view(['GET'])
 def get_cart_weight(request):
     cart = request.session.get('cart', {})
@@ -294,13 +337,6 @@ def get_cart_weight(request):
         'total_weight': total_weight
     })
 # ads
-from django.http import JsonResponse
-from rest_framework.decorators import api_view
-from django.conf import settings
-from .pochta_api import PochtaAPI
-import logging
-
-logger = logging.getLogger(__name__)
 
 # Инициализация API Почты России
 pochta_api = PochtaAPI(
@@ -730,4 +766,132 @@ def get_cdek_delivery_points(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Внутренняя ошибка сервера: {str(e)}'
+        }, status=500)
+
+
+
+
+# Инициализируем YooKassaAPI
+yookassa_api = YooKassaAPI()
+
+
+# views.py - добавьте новое представление
+@api_view(['POST'])
+def check_payment_status(request):
+    """
+    Проверка статуса платежа
+    """
+    try:
+        # Получаем ID заказа из запроса
+        order_id = request.data.get('order_id')
+        if not order_id:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Order ID is required'
+            }, status=400)
+
+        # Получаем заказ из базы данных
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Order not found'
+            }, status=404)
+
+        # Если у заказа нет ID платежа, возвращаем ошибку
+        if not order.payment_id:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Payment ID not found for this order'
+            }, status=400)
+
+        # Проверяем статус платежа
+        result = yookassa_api.check_payment_status(order.payment_id)
+
+        if result['status'] == 'success':
+            # Обновляем статус платежа в заказе
+            order.payment_status = result['payment_status']
+            if result['payment_status'] == 'succeeded':
+                order.status = 'paid'
+            order.save()
+
+            return JsonResponse({
+                'status': 'success',
+                'payment_status': result['payment_status'],
+                'order_status': order.status
+            })
+        else:
+            return JsonResponse({
+                'status': 'error',
+                'message': result['message']
+            }, status=500)
+
+    except Exception as e:
+        logger.error(f"Error in check_payment_status: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Payment status check error: {str(e)}'
+        }, status=500)
+
+
+# views.py - добавьте представление для обработки уведомлений
+@api_view(['POST'])
+@csrf_exempt
+def payment_webhook(request):
+    """
+    Обработчик уведомлений от YooKassa
+    """
+    try:
+        # Получаем данные из запроса
+        event_json = request.body.decode('utf-8')
+
+        # Парсим JSON
+        import json
+        event_data = json.loads(event_json)
+
+        # Получаем тип события и объект
+        event_type = event_data.get('event')
+        payment_data = event_data.get('object')
+
+        if event_type == 'payment.succeeded':
+            # Платеж успешно завершен
+            payment_id = payment_data.get('id')
+            metadata = payment_data.get('metadata', {})
+            order_id = metadata.get('order_id')
+
+            if order_id:
+                try:
+                    order = Order.objects.get(id=order_id)
+                    order.payment_status = 'succeeded'
+                    order.status = 'paid'
+                    order.save()
+                    logger.info(f"Payment {payment_id} for order {order_id} succeeded")
+                except Order.DoesNotExist:
+                    logger.error(f"Order {order_id} not found for payment {payment_id}")
+
+        elif event_type == 'payment.canceled':
+            # Платеж отменен
+            payment_id = payment_data.get('id')
+            metadata = payment_data.get('metadata', {})
+            order_id = metadata.get('order_id')
+
+            if order_id:
+                try:
+                    order = Order.objects.get(id=order_id)
+                    order.payment_status = 'canceled'
+                    order.save()
+                    logger.info(f"Payment {payment_id} for order {order_id} canceled")
+                except Order.DoesNotExist:
+                    logger.error(f"Order {order_id} not found for payment {payment_id}")
+
+        return JsonResponse({'status': 'success'})
+
+    except Exception as e:
+        logger.error(f"Error in payment_webhook: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
         }, status=500)

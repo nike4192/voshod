@@ -1,7 +1,8 @@
 <template>
+  <PaymentSuccess v-if="isPaymentSuccessPage" />
   <!-- Шапка на всю ширину -->
 
-  <div class="cart-page">
+  <div v-else class="cart-page">
   <div class="header-full-width">
     <div class="header-container">
       <NuxtLink to="/" class="brand-link">
@@ -41,12 +42,12 @@
           </div>
         </div>
         <!-- Сообщения об ошибках или успешной оплате -->
-        <div v-if="cartStore.paymentStatus === 'success'" class="payment-success">
-          <h3>{{ cartStore.paymentMessage }}</h3>
-          <p>Спасибо за ваш заказ!</p>
-          <Button @click="home" label="Вернуться на главную" class="mt-3"/>
-        </div>
-        <div v-else-if="cartStore.paymentStatus === 'error'" class="payment-error">
+<!--        <div v-if="cartStore.paymentStatus === 'success'" class="payment-success">-->
+<!--          <h3>{{ cartStore.paymentMessage }}</h3>-->
+<!--          <p>Спасибо за ваш заказ!</p>-->
+<!--          <Button @click="home" label="Вернуться на главную" class="mt-3"/>-->
+<!--        </div>-->
+        <div v-if="cartStore.paymentStatus === 'error'" class="payment-error">
           <h3>{{ cartStore.paymentMessage }}</h3>
           <div v-if="cartStore.insufficientItems && cartStore.insufficientItems.length > 0" class="mt-3">
             <h4>Недостаточно товаров на складе:</h4>
@@ -359,6 +360,24 @@
         </div>
       </div>
     </div>
+      <div v-if="paymentResult" class="payment-result">
+    <div v-if="paymentResult.status === 'success'" class="payment-success">
+      <h3>Платеж успешно завершен!</h3>
+      <p>Спасибо за ваш заказ. Мы начнем обработку заказа в ближайшее время.</p>
+      <Button @click="home" label="Вернуться на главную" class="mt-3"/>
+    </div>
+    <div v-else-if="paymentResult.status === 'error'" class="payment-error">
+      <h3>{{ paymentResult.message }}</h3>
+      <p>Пожалуйста, попробуйте оформить заказ еще раз или свяжитесь с нами для получения помощи.</p>
+      <Button @click="currentStep = 'cart'" label="Вернуться к корзине" class="mt-3"/>
+    </div>
+    <div v-else-if="paymentResult.status === 'pending'" class="payment-pending">
+      <h3>Платеж в обработке</h3>
+      <p>Ваш платеж обрабатывается. Пожалуйста, подождите или проверьте статус позже.</p>
+      <Button @click="checkPayment" label="Проверить статус" class="mt-3 mr-2"/>
+      <Button @click="home" label="Вернуться на главную" class="mt-3"/>
+    </div>
+  </div>
   </div>
   <!-- Футер -->
 <div class="footer">
@@ -390,9 +409,11 @@ import {useRouter} from 'vue-router';
 import {useToast} from 'primevue/usetoast';
 import CdekCitySelector from '~/components/CdekCitySelector.vue';
 import CdekPickupPointSelector from '~/components/CdekPickupPointSelector.vue';
+import PaymentSuccess from '~/components/PaymentSuccess.vue';
 
 const toast = useToast();
 const router = useRouter();
+const route = useRoute();
 const cartStore = useCart();
 const selectedCdekCityCode = ref('');
 const selectedCdekPickupPointCode = ref('');
@@ -400,6 +421,8 @@ const selectedCdekPickupPointCode = ref('');
 // Текущий шаг оформления заказа
 const currentStep = ref('cart');
 
+
+const paymentResult = ref(null);
 // Данные покупателя
 const customerData = ref({
   customer_name: '',
@@ -883,14 +906,14 @@ async function processPayment() {
       toast.add({
         severity: 'success',
         summary: 'Успех',
-        detail: 'Заказ успешно оформлен!',
+        detail: 'Заказ успешно оформлен! Перенаправляем на страницу оплаты...',
         life: 3000
       });
 
-      // Переходим на главную страницу или страницу успешного оформления заказа
-      setTimeout(() => {
-        router.push('/');
-      }, 2000);
+      // Перенаправляем на страницу оплаты YooKassa
+      if (result.redirectUrl) {
+        window.location.href = result.redirectUrl;
+      }
     } else if (result && result.status === 'error') {
       // Показываем сообщение об ошибке
       toast.add({
@@ -911,6 +934,87 @@ async function processPayment() {
   }
 }
 
+// Функция для проверки статуса платежа
+// Функция для проверки статуса платежа
+async function checkPayment() {
+  loading.value = true;
+
+  try {
+    const result = await cartStore.checkPaymentResult();
+    if (result) {
+      paymentResult.value = result;
+
+      // Показываем уведомление в зависимости от статуса
+      if (result.status === 'success') {
+        toast.add({
+          severity: 'success',
+          summary: 'Успех',
+          detail: 'Платеж успешно завершен!',
+          life: 3000
+        });
+      } else if (result.status === 'error') {
+        toast.add({
+          severity: 'error',
+          summary: 'Ошибка',
+          detail: result.message || 'Произошла ошибка при обработке платежа',
+          life: 5000
+        });
+      } else if (result.status === 'pending') {
+        toast.add({
+          severity: 'info',
+          summary: 'Информация',
+          detail: 'Платеж все еще обрабатывается',
+          life: 3000
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка при проверке статуса платежа:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: 'Произошла ошибка при проверке статуса платежа',
+      life: 5000
+    });
+  } finally {
+    loading.value = false;
+  }
+}
+
+// Проверка результата платежа при возврате с YooKassa
+async function checkPaymentAfterRedirect() {
+  // Проверяем, есть ли параметры в URL, указывающие на возврат с YooKassa
+  const hasPaymentParams = route.query.payment_id || route.query.success || route.query.status;
+
+  if (hasPaymentParams) {
+    try {
+      const result = await cartStore.checkPaymentResult();
+      if (result) {
+        paymentResult.value = result;
+      }
+    } catch (error) {
+      console.error('Ошибка при проверке результата платежа:', error);
+    }
+  } else {
+    // Если нет параметров в URL, проверяем сохраненные данные о платеже
+    const savedPaymentData = localStorage.getItem('currentPayment');
+    if (savedPaymentData) {
+      try {
+        const paymentData = JSON.parse(savedPaymentData);
+        if (paymentData.orderId) {
+          const result = await cartStore.checkPaymentStatus(paymentData.orderId);
+          paymentResult.value = result;
+        }
+      } catch (error) {
+        console.error('Ошибка при проверке сохраненного платежа:', error);
+      }
+    }
+  }
+}
+
+const isPaymentSuccessPage = computed(() => {
+  return paymentResult.value && paymentResult.value.status === 'success';
+});
 
 // Обработчик нормализации адреса
 async function handleAddressNormalized(normalizedAddress) {
@@ -1117,6 +1221,9 @@ watch(() => customerData.value.delivery_method, () => {
 onMounted(async () => {
   try {
     await cartStore.fetchCartProducts();
+
+    // Проверяем результат платежа при возврате с YooKassa
+    await checkPaymentAfterRedirect();
   } catch (error) {
     console.error('Ошибка при загрузке корзины:', error);
     toast.add({

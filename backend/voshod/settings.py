@@ -24,6 +24,14 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 env = Env()
 env.read_env()
 
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB
+
+# YooKassa settings
+YOOKASSA_SHOP_ID = '1004095'
+YOOKASSA_SECRET_KEY = 'test_ivZfxNbiL1f-jETzuZtKvp8lrIH_XGHsqRWHZZthmeA'
+YOOKASSA_RETURN_URL = 'http://localhost/cart'  # URL для возврата после оплаты
+
 # Настройки API Почты России
 POCHTA_API_TOKEN = 'zmI6LeNHjYFpbD_g04BLbg3sHOZz6GFK'  # Замените на ваш токен
 POCHTA_API_KEY = 'd29jeG9kLnZzaGRAeWFuZGV4LnJ1OndvY3hvZCFnb2RubzE='     # Замените на ваш ключ

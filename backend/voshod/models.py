@@ -38,6 +38,11 @@ class Order(models.Model):
     # Стоимость доставки
     shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Стоимость доставки")
 
+    # Новые поля для YooKassa
+    payment_id = models.CharField(max_length=100, blank=True, null=True, verbose_name="ID платежа YooKassa")
+    payment_status = models.CharField(max_length=50, blank=True, null=True, verbose_name="Статус платежа")
+
+    # payment_method = models.CharField(max_length=50, blank=True, null=True, verbose_name="Метод оплаты")
     def __str__(self):
         return f"Order #{self.id}"
 

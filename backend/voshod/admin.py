@@ -21,7 +21,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    # Обновляем список отображаемых полей с учетом новых полей
+    # Обновляем список отображаемых полей с учетом платежной информации
     list_display = (
         'id',
         'customer_name',
@@ -30,21 +30,12 @@ class OrderAdmin(admin.ModelAdmin):
         'total_price',
         'shipping_cost',
         'status',
+        'payment_status',  # Добавляем поле статуса платежа
         'created_at'
     )
 
     # Обновляем фильтры
-    list_filter = ('status', 'created_at', 'delivery_method')
-
-    # Обновляем поля для поиска
-    search_fields = (
-        'customer_name',
-        'customer_email',
-        'customer_phone',
-        'postal_code',
-        'delivery_address',
-        'delivery_city'
-    )
+    list_filter = ('status', 'payment_status', 'created_at', 'delivery_method')  # Добавляем фильтр по статусу платежа
 
     # Обновляем группировку полей в разделы
     fieldsets = (
@@ -71,16 +62,21 @@ class OrderAdmin(admin.ModelAdmin):
         ('Информация о заказе', {
             'fields': ('total_price', 'status', 'created_at')
         }),
+        ('Информация о платеже', {  # Добавляем новый раздел для платежной информации
+            'fields': ('payment_id', 'payment_status')
+        }),
     )
 
     # Делаем некоторые поля только для чтения
-    readonly_fields = ('created_at', 'shipping_cost')
-
+    readonly_fields = ('created_at', 'shipping_cost', 'payment_id')
     # Включаем инлайн-форму для элементов заказа
     inlines = [OrderItemInline]
 
     # Добавляем действия для изменения статуса заказа
-    actions = ['mark_as_processing', 'mark_as_shipped', 'mark_as_delivered', 'mark_as_cancelled']
+    actions = [
+        'mark_as_processing', 'mark_as_shipped', 'mark_as_delivered', 'mark_as_cancelled',
+        'mark_payment_as_succeeded', 'mark_payment_as_cancelled'  # Новые действия для статуса платежа
+    ]
 
     def mark_as_processing(self, request, queryset):
         queryset.update(status='processing')
@@ -101,3 +97,13 @@ class OrderAdmin(admin.ModelAdmin):
         queryset.update(status='cancelled')
 
     mark_as_cancelled.short_description = "Отметить как 'Отменен'"
+
+    def mark_payment_as_succeeded(self, request, queryset):
+        queryset.update(payment_status='succeeded')
+
+    mark_payment_as_succeeded.short_description = "Отметить платеж как 'Успешный'"
+
+    def mark_payment_as_cancelled(self, request, queryset):
+        queryset.update(payment_status='cancelled')
+
+    mark_payment_as_cancelled.short_description = "Отметить платеж как 'Отмененный'"
