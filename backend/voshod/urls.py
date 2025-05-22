@@ -22,8 +22,6 @@ from django.conf.urls.static import static
 from django.conf import settings
 from voshod.view import get_cart, add_cart, get_cart_products, remove_from_cart, process_payment, get_cart_weight, normalize_address, address_suggestions, calculate_shipping_cost, calculate_cdek_shipping, suggest_cdek_cities, get_cdek_delivery_points, check_payment_status, payment_webhook
 
-from .view import get_csrf_token
-
 router = DefaultRouter()
 router.register(r'product', ProductViewSet)
 
@@ -36,7 +34,6 @@ urlpatterns = [
     path('api/get_cart_products/', get_cart_products, name='get_cart_products'),
     path('api/cart/remove/<product_id>/', remove_from_cart, name='remove_from_cart'),
     path('api/process_payment/', process_payment, name='process_payment'),
-    path('api/get-csrf-token/', get_csrf_token, name='get-csrf-token'),
     path('api/normalize-address/', normalize_address, name='normalize_address'),
     path('api/address-suggestions/', address_suggestions, name='address_suggestions'),
     path('api/calculate-shipping/', calculate_shipping_cost, name='calculate_shipping_cost'),

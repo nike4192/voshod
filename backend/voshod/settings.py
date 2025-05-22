@@ -70,16 +70,6 @@ CORS_ALLOWED_ORIGINS = [
  "http://localhost",
 ]
 
-# Настройки CSRF для работы с SPA
-CSRF_COOKIE_SAMESITE = 'Lax'  # В продакшене используйте 'Lax' или 'Strict'
-CSRF_COOKIE_HTTPONLY = False  # False позволяет JavaScript читать cookie
-CSRF_USE_SESSIONS = False  # Храним токен в cookie, а не в сессии
-CSRF_COOKIE_NAME = 'csrftoken'  # Стандартное имя, которое ожидает Django
-CSRF_HEADER_NAME = 'X-CSRFToken'  # Заголовок для проверки токена
-CSRF_TRUSTED_ORIGINS = env.list(
-    "CSRF_TRUSTED_ORIGINS", default=[]
-)
-
 # Security Settings
 X_FRAME_OPTIONS = "SAMEORIGIN"
 
@@ -102,7 +92,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    'voshod.disable_csrf.DisableCSRF',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -111,16 +101,18 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'voshod.urls'
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            os.path.join(BASE_DIR, 'voshod', 'templates'),  # Путь к директории шаблонов
-        ],
-        'APP_DIRS': True,  # Оставьте True, чтобы Django также искал шаблоны в приложениях
+        # 'DIRS': [
+        #     os.path.join(BASE_DIR, 'voshod', 'templates'),  # Путь к директории шаблонов
+        # ],
+        # 'APP_DIRS': True,  # Оставьте True, чтобы Django также искал шаблоны в приложениях
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',

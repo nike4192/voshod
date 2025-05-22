@@ -5,163 +5,115 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from .utils import send_shipping_notification
-from django.utils.html import format_html
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'price', 'stock', 'is_available')
-    list_editable = ('price', 'stock')
-    search_fields = ('name', 'description')
-    list_filter = ('price', 'stock')
-    
-    def is_available(self, obj):
-        return obj.stock > 0
-    is_available.boolean = True
-    is_available.short_description = 'В наличии'
+    list_display = ('name', 'price', 'stock')  # Поля, отображаемые в списке
+    list_editable = ('price', 'stock')  # Поля, которые можно редактировать прямо в списке
+    search_fields = ('name', 'description')  # Поля для поиска
+    list_filter = ('price', 'stock')  # Фильтры
+
 
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
     readonly_fields = ('price',)
-    fields = ('product', 'quantity', 'price', 'total_price')
-    
-    def total_price(self, obj):
-        return obj.price * obj.quantity
-    total_price.short_description = 'Итого'
+
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 
-        'customer_name', 
-        'total_price', 
-        'status', 
-        'created_at', 
-        'payment_status', 
-        'shipping_notification_sent',
-        'delivery_method'
-    )
-    list_filter = (
-        'status', 
-        'payment_status', 
-        'shipping_notification_sent',
-        'delivery_method',
-        'created_at'
-    )
-    search_fields = (
-        'id', 
-        'customer_name', 
-        'customer_email', 
-        'customer_phone',
-        'tracking_number'
-    )
-    date_hierarchy = 'created_at'
-    readonly_fields = (
-        'created_at', 
-        'shipping_cost', 
-        'payment_id', 
-        'shipping_notification_sent',
-        'total_price'
-    )
+    'id', 'customer_name', 'delivery_method', 'total_price', 'status', 'created_at', 'payment_status', 'shipping_notification_sent')
+    list_filter = ('status', 'payment_status', 'shipping_notification_sent', 'delivery_method')
+    search_fields = ('id', 'customer_name', 'customer_email', 'customer_phone')
+
+    # Делаем некоторые поля только для чтения
+    readonly_fields = ('created_at', 'shipping_cost', 'payment_id', 'shipping_notification_sent')
+
+    # Включаем инлайн-форму для элементов заказа
     inlines = [OrderItemInline]
-    
+
+    # Добавляем действия для изменения статуса заказа
     actions = [
-        'mark_as_processing', 
-        'mark_as_shipped', 
-        'mark_as_delivered', 
-        'mark_as_cancelled',
-        'mark_payment_as_succeeded', 
-        'mark_payment_as_cancelled', 
-        'send_shipping_notification_action'
+        'mark_as_processing', 'mark_as_shipped', 'mark_as_delivered', 'mark_as_cancelled',
+        'mark_payment_as_succeeded', 'mark_payment_as_cancelled', 'send_shipping_notification_action',
+        'update_statuses_based_on_payment'
     ]
 
-    fieldsets = (
-        ('Информация о клиенте', {
-            'fields': (
-                'customer_name', 
-                'customer_email', 
-                'customer_phone'
-            ),
-            'classes': ('wide',)
-        }),
-        ('Информация о доставке', {
-            'fields': (
-                'delivery_method',
-                'delivery_address',
-                'postal_code',
-                'delivery_city',
-                'delivery_comment',
-                'shipping_cost',
-                'tracking_number',
-                'shipping_notification_sent'
-            ),
-            'classes': ('wide',)
-        }),
-        ('Информация о CDEK', {
-            'classes': ('collapse',),
-            'fields': (
-                'cdek_city_code',
-                'cdek_pickup_point_code'
-            )
-        }),
-        ('Информация о заказе', {
-            'fields': (
-                'total_price', 
-                'status', 
-                'created_at'
-            ),
-            'classes': ('wide',)
-        }),
-        ('Информация о платеже', {
-            'fields': (
-                'payment_id', 
-                'payment_status', 
-                'email_sent'
-            ),
-            'classes': ('wide',)
-        }),
-    )
-
-    def get_list_display(self, request):
-        list_display = super().get_list_display(request)
-        if request.user.is_superuser:
-            return list_display
-        return [field for field in list_display if field != 'shipping_notification_sent']
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related('customer').prefetch_related('items')
+    def get_fieldsets(self, request, obj=None):
+        """Динамически определяет отображаемые поля в зависимости от способа доставки"""
+        common_fieldsets = [
+            ('Информация о клиенте', {
+                'fields': ('customer_name', 'customer_email', 'customer_phone')
+            }),
+            ('Информация о заказе', {
+                'fields': ('total_price', 'status', 'created_at')
+            }),
+            ('Информация о платеже', {
+                'fields': ('payment_id', 'payment_status', 'email_sent'),
+            }),
+        ]
+        
+        if obj and obj.delivery_method == 'cdek':
+            delivery_fieldset = ('Информация о доставке', {
+                'fields': (
+                    'delivery_method',
+                    'delivery_address',
+                    'delivery_city',
+                    'delivery_comment',
+                    'shipping_cost',
+                    'tracking_number',
+                    'shipping_notification_sent',
+                    'cdek_city_code',
+                    'cdek_pickup_point_code'
+                )
+            })
+        else:  # pochta_russia или любой другой случай
+            delivery_fieldset = ('Информация о доставке', {
+                'fields': (
+                    'delivery_method',
+                    'delivery_address',
+                    'postal_code',
+                    'delivery_comment',
+                    'shipping_cost',
+                    'tracking_number',
+                    'shipping_notification_sent'
+                )
+            })
+            
+        return [delivery_fieldset] + common_fieldsets
 
     def mark_as_processing(self, request, queryset):
-        updated = queryset.update(status='processing')
-        self.message_user(request, f'Обновлено {updated} заказов')
+        queryset.update(status='processing')
+
     mark_as_processing.short_description = "Отметить как 'В обработке'"
 
     def mark_as_shipped(self, request, queryset):
-        updated = queryset.update(status='shipped')
-        self.message_user(request, f'Обновлено {updated} заказов')
+        queryset.update(status='shipped')
+
     mark_as_shipped.short_description = "Отметить как 'Отправлен'"
 
     def mark_as_delivered(self, request, queryset):
-        updated = queryset.update(status='delivered')
-        self.message_user(request, f'Обновлено {updated} заказов')
+        queryset.update(status='delivered')
+
     mark_as_delivered.short_description = "Отметить как 'Доставлен'"
 
     def mark_as_cancelled(self, request, queryset):
-        updated = queryset.update(status='cancelled')
-        self.message_user(request, f'Обновлено {updated} заказов')
+        queryset.update(status='cancelled')
+
     mark_as_cancelled.short_description = "Отметить как 'Отменен'"
 
     def mark_payment_as_succeeded(self, request, queryset):
-        updated = queryset.update(payment_status='succeeded')
-        self.message_user(request, f'Обновлено {updated} заказов')
+        queryset.update(payment_status='succeeded')
+
     mark_payment_as_succeeded.short_description = "Отметить платеж как 'Успешный'"
 
     def mark_payment_as_cancelled(self, request, queryset):
-        updated = queryset.update(payment_status='cancelled')
-        self.message_user(request, f'Обновлено {updated} заказов')
+        queryset.update(payment_status='cancelled')
+
     mark_payment_as_cancelled.short_description = "Отметить платеж как 'Отмененный'"
 
+    # Добавляем новое действие для отправки уведомления о доставке
     def send_shipping_notification_action(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(request, "Выберите только один заказ для отправки уведомления", level='error')
@@ -173,8 +125,10 @@ class OrderAdmin(admin.ModelAdmin):
             args=[order.pk],
         )
         return HttpResponseRedirect(url)
+
     send_shipping_notification_action.short_description = "Отправить уведомление о доставке"
 
+    # Добавляем URL для отправки уведомления
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -186,19 +140,30 @@ class OrderAdmin(admin.ModelAdmin):
         ]
         return custom_urls + urls
 
+    # Добавляем представление для отправки уведомления
     def send_shipping_notification_view(self, request, object_id):
         order = self.get_object(request, object_id)
 
+        # Если это POST-запрос, отправляем уведомление
         if request.method == 'POST':
             tracking_number = request.POST.get('tracking_number', '')
+
+            # Обновляем трек-номер и отправляем уведомление
             send_shipping_notification(order, tracking_number)
-            self.message_user(request, f"Уведомление об отправке для заказа #{order.id} успешно отправлено.")
+            
+            # Меняем статус заказа на "shipped"
+            order.status = 'shipped'
+            order.save()
+
+            self.message_user(request, f"Уведомление об отправке для заказа #{order.id} успешно отправлено. Статус заказа изменен на 'Отправлен'.")
+
             url = reverse(
                 'admin:voshod_order_change',
                 args=[object_id],
             )
             return HttpResponseRedirect(url)
 
+        # Если GET-запрос, показываем форму для ввода трек-номера
         context = {
             'title': f'Отправить уведомление о доставке для заказа #{order.id}',
             'order': order,
@@ -207,6 +172,7 @@ class OrderAdmin(admin.ModelAdmin):
         }
         return TemplateResponse(request, 'admin/send_shipping_notification.html', context)
 
+    # Обрабатываем нажатие кнопки на странице редактирования заказа
     def response_change(self, request, obj):
         if "_send_shipping_notification" in request.POST:
             url = reverse(
@@ -215,3 +181,39 @@ class OrderAdmin(admin.ModelAdmin):
             )
             return HttpResponseRedirect(url)
         return super().response_change(request, obj)
+
+    # Автоматически меняем статус заказа в зависимости от статуса платежа
+    def save_model(self, request, obj, form, change):
+        # Если статус платежа "succeeded" или "paid", меняем статус заказа на "processing"
+        if obj.payment_status in ['succeeded', 'paid']:
+            obj.status = 'processing'
+        # Иначе, если статус не "shipped" или "delivered", ставим "pending"
+        elif obj.status not in ['shipped', 'delivered', 'cancelled']:
+            obj.status = 'pending'
+            
+        super().save_model(request, obj, form, change)
+        
+    # Добавляем действие для обновления статусов существующих заказов на основе статуса платежа
+    def update_statuses_based_on_payment(self, request, queryset):
+        updated_processing = 0
+        updated_pending = 0
+        
+        for order in queryset:
+            if order.payment_status in ['succeeded', 'paid']:
+                if order.status != 'processing' and order.status not in ['shipped', 'delivered', 'cancelled']:
+                    order.status = 'processing'
+                    order.save()
+                    updated_processing += 1
+            else:
+                if order.status not in ['processing', 'shipped', 'delivered', 'cancelled']:
+                    order.status = 'pending'
+                    order.save()
+                    updated_pending += 1
+        
+        if updated_processing > 0 or updated_pending > 0:
+            message = f"Обновлено заказов: {updated_processing} на 'В обработке' и {updated_pending} на 'Ожидающие'"
+            self.message_user(request, message)
+        else:
+            self.message_user(request, "Все заказы уже имеют корректные статусы.")
+    
+    update_statuses_based_on_payment.short_description = "Обновить статусы заказов на основе статуса платежа"

@@ -1,6 +1,4 @@
 from django.shortcuts import render, get_object_or_404
-from django.middleware.csrf import get_token
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 from django.db import transaction
 import logging
@@ -20,36 +18,6 @@ from .pochta_api import PochtaAPI
 logger = logging.getLogger(__name__)
 
 
-@require_GET
-@csrf_exempt  # Отключаем CSRF-проверку для этого view
-def get_csrf_token(request):
-    """
-    Устанавливает и возвращает CSRF-токен для клиента с явным контролем над cookie.
-    """
-    # Получаем CSRF-токен
-    csrf_token = get_token(request)
-
-    # Создаем ответ
-    response = JsonResponse({
-        'csrfToken': csrf_token,
-        'status': 'success',
-        'message': 'CSRF token has been set in cookies'
-    })
-
-    # Явно устанавливаем CSRF cookie с нужными параметрами
-    response.set_cookie(
-        key=settings.CSRF_COOKIE_NAME,  # По умолчанию 'csrftoken'
-        value=csrf_token,
-        max_age=settings.CSRF_COOKIE_AGE,  # По умолчанию 1 год
-        domain=settings.CSRF_COOKIE_DOMAIN,  # Домен cookie
-        path=settings.CSRF_COOKIE_PATH,  # Путь cookie, обычно '/'
-        secure=settings.CSRF_COOKIE_SECURE,  # True для HTTPS
-        httponly=settings.CSRF_COOKIE_HTTPONLY,  # Обычно False для CSRF
-        samesite=settings.CSRF_COOKIE_SAMESITE  # 'Lax', 'Strict' или 'None'
-    )
-
-    return response
-
 @api_view(['POST'])
 def add_cart(request, product_id):
     product = get_object_or_404(Product, id=product_id)
@@ -68,7 +36,6 @@ def add_cart(request, product_id):
     request.session.modified = True  # Явно помечаем сессию как измененную
 
     return JsonResponse({'status': 'success', 'cart': cart})
-
 
 @api_view(['GET'])
 def get_cart(request):
@@ -844,7 +811,6 @@ def check_payment_status(request):
 
 # views.py - добавьте представление для обработки уведомлений
 @api_view(['POST'])
-@csrf_exempt
 def payment_webhook(request):
     """
     Обработчик уведомлений от YooKassa
