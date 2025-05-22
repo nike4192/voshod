@@ -42,6 +42,15 @@ CDEK_CLIENT_SECRET = env.str("CDEK_CLIENT_SECRET", default="RmAmgvSgSl1yirlz9Qup
 CDEK_API_URL = env.str("CDEK_API_URL", default="https://api.edu.cdek.ru")
 CDEK_FROM_LOCATION_CODE = env.str('CDEK_FROM_LOCATION_CODE', 44)
 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.yandex.ru'
+EMAIL_PORT = 465
+EMAIL_HOST_USER = 'vovaexample1@yandex.ru'  # Замените на вашу почту
+EMAIL_HOST_PASSWORD = 'bejvpccupogfmbjp'  # Замените на пароль приложения
+EMAIL_USE_SSL = True
+EMAIL_USE_TLS = False
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
@@ -102,11 +111,16 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'voshod.urls'
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
+        'DIRS': [
+            os.path.join(BASE_DIR, 'voshod', 'templates'),  # Путь к директории шаблонов
+        ],
+        'APP_DIRS': True,  # Оставьте True, чтобы Django также искал шаблоны в приложениях
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
@@ -177,3 +191,4 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+

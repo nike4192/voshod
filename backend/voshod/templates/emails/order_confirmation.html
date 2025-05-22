@@ -1,0 +1,82 @@
+{% load custom_filters %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Подтверждение заказа</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .header { background: #f8f9fa; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Спасибо за ваш заказ!</h1>
+            <p>Заказ #{{ order.id }}</p>
+        </div>
+
+        <div class="content">
+            <h2>Информация о заказе</h2>
+            <p><strong>Имя:</strong> {{ order.customer_name }}</p>
+            <p><strong>Email:</strong> {{ order.customer_email }}</p>
+            <p><strong>Телефон:</strong> {{ order.customer_phone }}</p>
+            <p><strong>Дата заказа:</strong> {{ order.created_at|date:"d.m.Y H:i" }}</p>
+            <p><strong>Статус оплаты:</strong> Оплачен</p>
+
+            <h3>Способ доставки:</h3>
+            <p>{{ order.get_delivery_method_display }}</p>
+
+            {% if order.delivery_method == 'cdek' %}
+                <p><strong>Город:</strong> {{ order.delivery_city }}</p>
+                <p><strong>Пункт выдачи:</strong> {{ order.delivery_address }}</p>
+            {% else %}
+                <p><strong>Адрес доставки:</strong> {{ order.delivery_address }}</p>
+                <p><strong>Почтовый индекс:</strong> {{ order.postal_code }}</p>
+            {% endif %}
+
+            <h3>Заказанные товары:</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Товар</th>
+                        <th>Количество</th>
+                        <th>Цена</th>
+                        <th>Сумма</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order_items %}
+                    <tr>
+                        <td>{{ item.merch.name }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>{{ item.price }} руб.</td>
+                        <td>{{ item.price|floatformat:2|multiply:item.quantity }} руб.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3"><strong>Стоимость доставки:</strong></td>
+                        <td>{{ order.shipping_cost }} руб.</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3"><strong>Итого:</strong></td>
+                        <td><strong>{{ order.total_price }} руб.</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p>С уважением, команда вашего магазина</p>
+            <p>Если у вас возникли вопросы, свяжитесь с нами по телефону или email</p>
+        </div>
+    </div>
+</body>
+</html>

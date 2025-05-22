@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Отправить уведомление о доставке</h1>
+    <div>
+        <p>Заказ #{{ order.id }} от {{ order.customer_name }} ({{ order.customer_email }})</p>
+        <p>Статус заказа: {{ order.status }}</p>
+        
+        {% if order.shipping_notification_sent %}
+        <div class="alert alert-warning">
+            <p><strong>Внимание!</strong> Уведомление об отправке для этого заказа уже было отправлено.</p>
+            <p>Повторная отправка уведомления перезапишет предыдущее.</p>
+        </div>
+        {% endif %}
+        
+        <form method="post">
+            {% csrf_token %}
+            <fieldset class="module aligned">
+                <div class="form-row">
+                    <div class="field-box">
+                        <label for="id_tracking_number">Трек-номер отправления:</label>
+                        <input type="text" name="tracking_number" id="id_tracking_number" value="{{ order.tracking_number|default:'' }}" />
+                        <div class="help">Необязательное поле. Если оставить пустым, уведомление будет отправлено без трек-номера.</div>
+                    </div>
+                </div>
+            </fieldset>
+            
+            <div class="submit-row">
+                <input type="submit" value="Отправить уведомление" class="default" />
+                <a href="{% url 'admin:voshod_order_change' order.id %}" class="button">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

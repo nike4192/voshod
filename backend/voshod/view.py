@@ -814,6 +814,12 @@ def check_payment_status(request):
             order.payment_status = result['payment_status']
             if result['payment_status'] == 'succeeded':
                 order.status = 'paid'
+
+                # Отправляем письмо только если оно еще не было отправлено
+                if not order.email_sent:
+                    from .utils import send_order_confirmation_email
+                    send_order_confirmation_email(order)
+
             order.save()
 
             return JsonResponse({
@@ -868,6 +874,11 @@ def payment_webhook(request):
                     order.status = 'paid'
                     order.save()
                     logger.info(f"Payment {payment_id} for order {order_id} succeeded")
+
+                    # Отправляем письмо с подтверждением заказа
+                    from .utils import send_order_confirmation_email
+                    send_order_confirmation_email(order)
+
                 except Order.DoesNotExist:
                     logger.error(f"Order {order_id} not found for payment {payment_id}")
 

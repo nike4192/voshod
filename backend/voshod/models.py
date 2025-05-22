@@ -42,6 +42,11 @@ class Order(models.Model):
     payment_id = models.CharField(max_length=100, blank=True, null=True, verbose_name="ID платежа YooKassa")
     payment_status = models.CharField(max_length=50, blank=True, null=True, verbose_name="Статус платежа")
 
+    email_sent = models.BooleanField(default=False, verbose_name="Письмо отправлено")
+
+    tracking_number = models.CharField(max_length=100, blank=True, null=True, verbose_name="Трек-номер отправления")
+    shipping_notification_sent = models.BooleanField(default=False, verbose_name="Уведомление об отправке отправлено")
+
     # payment_method = models.CharField(max_length=50, blank=True, null=True, verbose_name="Метод оплаты")
     def __str__(self):
         return f"Order #{self.id}"
