@@ -94,7 +94,23 @@
                     <div class="cart-item-details flex-grow-1">
                       <h3 class="m-0 mb-2">{{ item.name }}</h3>
                       <p class="m-0 mb-1">Цена: {{ item.price }} ₽</p>
-                      <p class="m-0">Количество: {{ item.quantity }}</p>
+                      <div class="quantity-controls">
+                        <Button 
+                          @click="decreaseItemQuantity(item.id)" 
+                          class="p-button-secondary p-button-sm quantity-btn"
+                          icon="pi pi-minus"
+                          :disabled="cartStore.loading"
+                        />
+                        <span class="quantity-display">
+                          {{ item.quantity }}
+                        </span>
+                        <Button 
+                          @click="increaseItemQuantity(item.id)" 
+                          class="p-button-secondary p-button-sm quantity-btn"
+                          icon="pi pi-plus"
+                          :disabled="cartStore.loading || isAtMaxStock(item)"
+                        />
+                      </div>
                     </div>
                     <Button
                         @click="removeItem(item.id)"
@@ -855,6 +871,95 @@ const removeItem = async (productId) => {
   }
 };
 
+// Получение максимально доступного количества товара на складе
+const productStockCache = ref({});
+
+// Функция для получения доступного количества товара
+const getAvailableStock = (item) => {
+  // Если информация о товаре кэширована, используем ее
+  if (productStockCache.value[item.id] !== undefined) {
+    return productStockCache.value[item.id];
+  }
+  
+  // Если в товаре есть поле stock, используем его
+  if (item.stock !== undefined) {
+    return item.stock;
+  }
+  
+  // По умолчанию возвращаем текущее количество + некоторый запас
+  return item.quantity + 3;
+};
+
+// Функция для проверки, что достигнуто максимальное количество товара
+const isAtMaxStock = (item) => {
+  const availableStock = getAvailableStock(item);
+  return item.quantity >= availableStock;
+};
+
+// Обновляем информацию о доступном количестве товара после получения ответа об ошибке
+const updateProductStock = (productId, availableStock) => {
+  productStockCache.value[productId] = availableStock;
+};
+
+// Увеличение количества товара в корзине
+const increaseItemQuantity = async (productId) => {
+  try {
+    const result = await cartStore.increaseQuantity(productId);
+    
+    // Если результат содержит ошибку о нехватке товара
+    if (result && result.error) {
+      // Находим название товара для более понятного сообщения
+      const productName = cartStore.cartProducts.find(item => item.id === productId)?.name || 'Товар';
+      
+      // Обновляем информацию о доступном количестве для этого товара
+      updateProductStock(productId, result.available);
+      
+      toast.add({
+        severity: 'warn',
+        summary: 'Ограничение количества',
+        detail: `${result.message || 'Недостаточно товара на складе'}. Для товара "${productName}" доступно: ${result.available} шт.`,
+        life: 5000
+      });
+      return;
+    }
+    
+    // Обновляем стоимость доставки при изменении состава корзины
+    if (cartStore.deliveryIndex || cartStore.selectedCdekCity) {
+      await cartStore.fetchCartWeight();
+      await cartStore.calculateShipping();
+    }
+  } catch (error) {
+    console.error('Ошибка при увеличении количества товара:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: 'Не удалось увеличить количество товара',
+      life: 3000
+    });
+  }
+};
+
+// Уменьшение количества товара в корзине
+const decreaseItemQuantity = async (productId) => {
+  try {
+    await cartStore.decreaseQuantity(productId);
+    
+    // Обновляем стоимость доставки при изменении состава корзины
+    if (cartStore.deliveryIndex || cartStore.selectedCdekCity) {
+      await cartStore.fetchCartWeight();
+      await cartStore.calculateShipping();
+    }
+  } catch (error) {
+    console.error('Ошибка при уменьшении количества товара:', error);
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: 'Не удалось уменьшить количество товара',
+      life: 3000
+    });
+  }
+};
+
 // Функция для подтверждения заказа
 async function processPayment() {
   if (cartStore.shippingLoading) {
@@ -1457,15 +1562,18 @@ onMounted(async () => {
 }
 
 .quantity-btn {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #f0f0f0;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+  width: 2rem !important;
+  height: 2rem !important;
+  padding: 0 !important;
+}
+
+.quantity-btn :deep(.p-button-icon) {
+  color: #000;
+}
+
+/* Для неактивной кнопки делаем иконку серой */
+.quantity-btn:disabled :deep(.p-button-icon) {
+  color: #ccc;
 }
 
 .quantity-input {
@@ -1873,7 +1981,7 @@ onMounted(async () => {
   width: 100%;
   background-color: var(--surface-section);
   border-top: 1px solid var(--surface-border);
-  margin-top: 2rem;
+  margin-top: auto; /* Прижимаем футер к низу */
 }
 
 .footer-container {
@@ -1926,6 +2034,9 @@ onMounted(async () => {
   margin: 0;
   padding: 0;
   width: 100%;
+  min-height: 100vh; /* Минимальная высота равна высоте viewport */
+  display: flex;
+  flex-direction: column;
 }
 
 /* Применяем стили к body только когда активна страница корзины */
@@ -1940,5 +2051,109 @@ onMounted(async () => {
     align-items: center;
     gap: 1rem;
   }
+}
+
+.cart-item-details {
+  flex: 1;
+}
+
+.quantity-controls {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.quantity-btn {
+  width: 2rem !important;
+  height: 2rem !important;
+  padding: 0 !important;
+}
+
+.quantity-btn :deep(.p-button-icon) {
+  color: #000;
+}
+
+/* Для неактивной кнопки делаем иконку серой */
+.quantity-btn:disabled :deep(.p-button-icon) {
+  color: #ccc;
+}
+
+.quantity-display {
+  margin: 0 0.5rem;
+  min-width: 2rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.cart-item-actions {
+  display: flex;
+  align-items: center;
+}
+
+.stock-warning {
+  color: #dc3545;
+  font-size: 0.8rem;
+  margin-left: 5px;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.quantity-display {
+  display: flex;
+  align-items: center;
+  margin: 0 0.5rem;
+  min-width: 2rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.is-near-max-stock {
+  color: #ffc107;
+}
+
+.is-at-max-stock {
+  color: #dc3545;
+}
+
+.cart-page {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-container {
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1rem;
+  flex: 1 0 auto; /* Контент не будет сжиматься */
+}
+
+.cart-page-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Стили для футера */
+.footer {
+  width: 100%;
+  background-color: var(--surface-section);
+  border-top: 1px solid var(--surface-border);
+  margin-top: auto;
+  flex-shrink: 0; /* Футер не будет сжиматься */
+}
+
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 </style>

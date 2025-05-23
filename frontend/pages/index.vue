@@ -33,10 +33,18 @@
             </template>
             <template #content>
               <p class="product-description m-0"></p>
+              <div class="stock-info">
+                <span :class="{'stock-low': product.stock < 5}">В наличии: {{ product.stock }} шт.</span>
+              </div>
             </template>
             <template #footer>
               <div class="product-actions">
-                <Button label="В корзину" class="p-button-outlined" @click="cartStore.addCart(product.id)"/>
+                <Button 
+                  label="В корзину" 
+                  class="p-button-outlined" 
+                  @click="addToCart(product)"
+                  :disabled="product.stock <= 0"
+                />
               </div>
             </template>
           </Card>
@@ -64,11 +72,13 @@
 import {useProducts} from '~/composables/useProduct.js';
 import {useCart} from '~/composables/useCart.js';
 import {ref, onMounted, onUnmounted} from 'vue';
+import { useToast } from 'primevue/usetoast';
 
 const products = ref([]);
 const error = ref(null);
 const router = useRouter();
 const cartStore = useCart();
+const toast = useToast();
 
 // Добавляем класс к body при монтировании компонента
 onMounted(() => {
@@ -82,6 +92,36 @@ onUnmounted(() => {
 
 const basket = () => {
   router.push('/cart');
+};
+
+const addToCart = async (product) => {
+  if (product.stock <= 0) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Товар недоступен',
+      detail: 'К сожалению, товара нет в наличии',
+      life: 3000
+    });
+    return;
+  }
+
+  const result = await cartStore.addCart(product.id);
+  
+  if (result.success) {
+    toast.add({
+      severity: 'success',
+      summary: 'Успех',
+      detail: 'Товар добавлен в корзину',
+      life: 3000
+    });
+  } else if (result.error) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Ограничение количества',
+      detail: result.message,
+      life: 3000
+    });
+  }
 };
 
 onMounted(async () => {
@@ -311,5 +351,20 @@ body.index-page-active {
     align-items: center;
     gap: 1rem;
   }
+}
+
+.stock-info {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-color-secondary);
+}
+
+.stock-low {
+  color: #f59e0b;
+}
+
+.product-card .p-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

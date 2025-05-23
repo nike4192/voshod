@@ -375,11 +375,21 @@ const calculateCdekShipping = async () => {
       const response = await axios.post(`/api/cart/${productId}/`);
       console.log('Товар добавлен в корзину:', response.data);
       await fetchCartProducts(); // Обновляем корзину после добавления
-      return true;
+      return { success: true };
     } catch (err) {
       console.error('Ошибка при добавлении товара в корзину:', err);
       error.value = err;
-      return false;
+      
+      // Обработка ошибки нехватки товара на складе
+      if (err.response && err.response.status === 400 && err.response.data) {
+        return {
+          success: false,
+          error: true,
+          message: err.response.data.message || 'Нельзя добавить больше товаров, чем есть на складе',
+          available: err.response.data.available || 0
+        };
+      }
+      return { success: false, error: true, message: 'Ошибка при добавлении товара в корзину' };
     } finally {
       loading.value = false;
     }
@@ -395,6 +405,57 @@ const calculateCdekShipping = async () => {
       return true;
     } catch (err) {
       console.error('Ошибка при удалении товара из корзины:', err);
+      error.value = err;
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Увеличение количества товара в корзине
+  const increaseQuantity = async (productId) => {
+    loading.value = true;
+    try {
+      const response = await axios.post(`/api/cart/update/${productId}/`, {
+        action: 'increase'
+      });
+      console.log('Количество товара увеличено:', response.data);
+      await fetchCartProducts(); // Обновляем корзину после увеличения количества
+      return true;
+    } catch (err) {
+      console.error('Ошибка при увеличении количества товара:', err);
+      error.value = err;
+      
+      // Улучшенная обработка ошибок
+      if (err && err.response) {
+        // Если ошибка связана с нехваткой товара на складе
+        if (err.response.status === 400 && err.response.data) {
+          console.log('Детали ошибки:', err.response.data);
+          return {
+            error: true,
+            message: err.response.data.message || 'Нельзя добавить больше товаров, чем есть на складе',
+            available: err.response.data.available || 0
+          };
+        }
+      }
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Уменьшение количества товара в корзине
+  const decreaseQuantity = async (productId) => {
+    loading.value = true;
+    try {
+      const response = await axios.post(`/api/cart/update/${productId}/`, {
+        action: 'decrease'
+      });
+      console.log('Количество товара уменьшено:', response.data);
+      await fetchCartProducts(); // Обновляем корзину после уменьшения количества
+      return true;
+    } catch (err) {
+      console.error('Ошибка при уменьшении количества товара:', err);
       error.value = err;
       return false;
     } finally {
@@ -698,6 +759,8 @@ const checkPaymentResult = async () => {
     fetchCart,
     addCart,
     removeFromCart,
+    increaseQuantity,
+    decreaseQuantity,
     normalizeAddress,
     processPayment,
     saveNormalizedAddress,

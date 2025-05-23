@@ -22,14 +22,26 @@ logger = logging.getLogger(__name__)
 def add_cart(request, product_id):
     product = get_object_or_404(Product, id=product_id)
     cart = request.session.get('cart', {})
+    product_key = str(product.pk)
+
+    # Получаем текущее количество в корзине
+    current_quantity = cart[product_key]['quantity'] if product_key in cart else 0
+    
+    # Проверяем, не превышает ли новое количество доступное на складе
+    if current_quantity + 1 > product.stock:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Нельзя добавить больше товаров, чем есть на складе',
+            'available': product.stock
+        }, status=400)
 
     # Проверяем, существует ли товар в корзине
-    if str(product.pk) in cart:
+    if product_key in cart:
         # Если существует, увеличиваем количество
-        cart[str(product.pk)]['quantity'] += 1
+        cart[product_key]['quantity'] += 1
     else:
         # Если не существует, добавляем товар с количеством 1
-        cart[str(product.pk)] = {'quantity': 1}
+        cart[product_key] = {'quantity': 1}
 
     # Сохраняем обновленную корзину в сессии
     request.session['cart'] = cart
@@ -50,6 +62,85 @@ def get_cart(request):
         'cart': cart,
         'total_quantity': total_quantity
     })
+
+@api_view(['POST'])
+def update_cart_item(request, product_id):
+    """
+    Обновляет количество товара в корзине
+    Принимает параметр action: 'increase' или 'decrease'
+    """
+    try:
+        action = request.data.get('action')
+        if action not in ['increase', 'decrease']:
+            return JsonResponse({'status': 'error', 'message': 'Требуется указать действие (increase/decrease)'}, status=400)
+        
+        # Получаем текущую корзину из сессии
+        cart = request.session.get('cart', {})
+        product_key = str(product_id)
+        
+        # Проверяем, существует ли товар в корзине
+        if product_key not in cart:
+            return JsonResponse({'status': 'error', 'message': 'Товар не найден в корзине'}, status=404)
+        
+        # Проверяем наличие товара в базе данных
+        try:
+            product = Product.objects.get(pk=product_id)
+        except Product.DoesNotExist:
+            # Если товар больше не существует, удаляем его из корзины
+            del cart[product_key]
+            request.session['cart'] = cart
+            request.session.modified = True
+            return JsonResponse({'status': 'error', 'message': 'Товар не найден в базе данных'}, status=404)
+        
+        # Изменяем количество товара в зависимости от действия
+        current_quantity = cart[product_key]['quantity']
+        
+        if action == 'increase':
+            # При увеличении проверяем наличие на складе
+            if current_quantity + 1 <= product.stock:
+                cart[product_key]['quantity'] += 1
+            else:
+                return JsonResponse({
+                    'status': 'error', 
+                    'message': 'Нельзя добавить больше товаров, чем есть на складе',
+                    'available': product.stock
+                }, status=400)
+        else:  # decrease
+            # Уменьшаем количество, но не меньше 1
+            if current_quantity > 1:
+                cart[product_key]['quantity'] -= 1
+            else:
+                # Если количество = 1 и мы уменьшаем, то удаляем товар из корзины
+                del cart[product_key]
+        
+        # Сохраняем обновленную корзину в сессии
+        request.session['cart'] = cart
+        request.session.modified = True
+        
+        # Подсчитываем общее количество товаров и стоимость корзины
+        total_quantity = 0
+        total_price = 0
+        for item_id, item_data in cart.items():
+            total_quantity += item_data['quantity']
+            try:
+                product_price = Product.objects.get(pk=item_id).price
+                total_price += float(product_price) * item_data['quantity']
+            except Product.DoesNotExist:
+                continue
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Количество товара обновлено',
+            'cart': cart,
+            'total_quantity': total_quantity,
+            'total_price': total_price
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении количества товара: {str(e)}")
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Ошибка: {str(e)}'
+        }, status=500)
 
 @api_view(['GET'])
 def get_cart_products(request):
@@ -80,7 +171,8 @@ def get_cart_products(request):
                 'quantity': quantity,
                 'image_url': image_url,
                 'total': item_price,
-                'item_total': item_price  # Добавлено для совместимости со второй версией
+                'item_total': item_price,  # Добавлено для совместимости со второй версией
+                'stock': product.stock  # Добавляем информацию о доступном на складе количестве
             })
         except Product.DoesNotExist:
             # Удаляем товар из корзины, если он не найден
